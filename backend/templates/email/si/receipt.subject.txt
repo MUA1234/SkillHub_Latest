@@ -1,0 +1,1 @@
+ඔබේ SkillHub රිසිට්පත — {{ currency }} {{ amount_formatted }}

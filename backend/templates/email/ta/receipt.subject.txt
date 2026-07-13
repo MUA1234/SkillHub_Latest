@@ -1,0 +1,1 @@
+உங்கள் SkillHub ரசீது — {{ currency }} {{ amount_formatted }}

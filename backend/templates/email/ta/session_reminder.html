@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ta">
+  <body style="font-family: 'Noto Sans Tamil', system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    <h1 style="color: #047857;">உங்கள் அமர்வு விரைவில் தொடங்குகிறது{% if first_name %}, {{ first_name }}{% endif %}.</h1>
+    <p><strong>{{ session_title }}</strong> ({{ teacher_name }} உடன்) <strong>{{ when_local }}</strong> மணிக்கு தொடங்கும்.</p>
+    <p style="margin: 32px 0;">
+      <a href="{{ join_url }}"
+         style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+        அமர்வைத் திற
+      </a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">குறிப்பு: மைக்/கேமராவைச் சோதிக்க சில நிமிடங்கள் முன்பே இணைப்பைத் திறக்கவும்.</p>
+  </body>
+</html>

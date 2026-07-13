@@ -1,0 +1,1 @@
+{% if approved %}உதவித்தொகை அங்கீகரிக்கப்பட்டது — {{ scholarship_title }}{% else %}உதவித்தொகை புதுப்பிப்பு — {{ scholarship_title }}{% endif %}

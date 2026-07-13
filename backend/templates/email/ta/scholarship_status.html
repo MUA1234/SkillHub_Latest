@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ta">
+  <body style="font-family: 'Noto Sans Tamil', system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    {% if approved %}
+      <h1 style="color: #047857;">உதவித்தொகை அங்கீகரிக்கப்பட்டது 🎉</h1>
+      <p>நல்ல செய்தி{% if first_name %}, {{ first_name }}{% endif %}. <strong>{{ scholarship_title }}</strong> க்கான உங்கள் விண்ணப்பம் அங்கீகரிக்கப்பட்டது.</p>
+      <p>நேரடி அமர்வுக்காக பயன்படுத்த <strong>{{ currency }} {{ amount_formatted }}</strong> மானியம் தயாராக உள்ளது.</p>
+      <p style="margin: 32px 0;">
+        <a href="{{ applications_url }}"
+           style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+          என் மானியங்களைப் பார்க்க
+        </a>
+      </p>
+    {% else %}
+      <h1 style="color: #b91c1c;">விண்ணப்ப புதுப்பிப்பு</h1>
+      <p>வணக்கம்{% if first_name %} {{ first_name }}{% endif %}, <strong>{{ scholarship_title }}</strong> க்கான உங்கள் விண்ணப்பம் இம்முறை அங்கீகரிக்கப்படவில்லை.</p>
+      {% if reviewer_notes %}<p style="background:#f3f4f6; padding:10px; border-radius:8px;">{{ reviewer_notes }}</p>{% endif %}
+      <p>நீங்கள் எந்த நேரத்திலும் மற்ற திறந்த உதவித்தொகைகளுக்கு விண்ணப்பிக்கலாம்.</p>
+      <p style="margin: 32px 0;">
+        <a href="{{ scholarships_url }}"
+           style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+          உதவித்தொகைகளைப் பார்க்க
+        </a>
+      </p>
+    {% endif %}
+    <p style="color: #6b7280; font-size: 13px;">— {{ from_name }}</p>
+  </body>
+</html>

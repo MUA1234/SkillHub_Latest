@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ta">
+  <body style="font-family: 'Noto Sans Tamil', system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    <h1 style="color: #047857;">உங்கள் கடவுச்சொல்லை மீட்டமைக்கவும்</h1>
+    <p>{% if first_name %}வணக்கம் {{ first_name }},{% else %}வணக்கம்,{% endif %} உங்கள் {{ from_name }} கடவுச்சொல்லை மீட்டமைக்க கோரிக்கை வந்துள்ளது.</p>
+    <p style="margin: 32px 0;">
+      <a href="{{ reset_url }}"
+         style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+        கடவுச்சொல் மீட்டமை
+      </a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">
+      அல்லது இந்த இணைப்பை உலாவியில் ஒட்டவும்:<br>
+      <a href="{{ reset_url }}">{{ reset_url }}</a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">இந்த இணைப்பு 1 மணி நேரத்தில் காலாவதியாகும். நீங்கள் கோரவில்லை என்றால், இந்த மின்னஞ்சலை புறக்கணிக்கலாம்.</p>
+  </body>
+</html>

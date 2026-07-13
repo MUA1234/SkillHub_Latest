@@ -1,0 +1,1 @@
+{% if approved %}ශිෂ්‍යත්වය අනුමතයි — {{ scholarship_title }}{% else %}ශිෂ්‍යත්ව යාවත්කාලීන කිරීම — {{ scholarship_title }}{% endif %}

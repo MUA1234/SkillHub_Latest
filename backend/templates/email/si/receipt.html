@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="si">
+  <body style="font-family: 'Noto Sans Sinhala', system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    <h1 style="color: #047857;">ගෙවීම ලැබිණි{% if first_name %}, {{ first_name }}{% endif %}.</h1>
+    <p>ඔබේ ගෙවීමට ස්තූතියි. රිසිට්පත මෙන්න:</p>
+    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+      <tr><td style="padding: 6px 0; color:#6b7280;">අයිතමය</td><td style="padding: 6px 0;">{{ item_title }}</td></tr>
+      <tr><td style="padding: 6px 0; color:#6b7280;">මුදල</td><td style="padding: 6px 0;"><strong>{{ currency }} {{ amount_formatted }}</strong></td></tr>
+      <tr><td style="padding: 6px 0; color:#6b7280;">ක්‍රමය</td><td style="padding: 6px 0;">{{ method }}</td></tr>
+      <tr><td style="padding: 6px 0; color:#6b7280;">ගනුදෙනු අංකය</td><td style="padding: 6px 0; font-family: monospace;">{{ transaction_id }}</td></tr>
+      <tr><td style="padding: 6px 0; color:#6b7280;">ගෙවූ වේලාව</td><td style="padding: 6px 0;">{{ paid_at }}</td></tr>
+    </table>
+    {% if is_demo %}
+      <p style="background:#fef3c7; color:#92400e; padding:10px; border-radius:8px; font-size:13px;">
+        මෙය ආදර්ශන ගෙවීමකි. සැබෑ මුදල් අඩු කර නැත.
+      </p>
+    {% endif %}
+    <p style="color: #6b7280; font-size: 13px;">රිසිට්පත ඔබේ වාර්තා සඳහා රඳවාගන්න. යමක් වැරදි නම් මෙම ඊමේල් එකට පිළිතුරු දෙන්න.</p>
+  </body>
+</html>

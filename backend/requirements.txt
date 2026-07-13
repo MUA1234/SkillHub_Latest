@@ -1,0 +1,41 @@
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27,<1.0
+pydantic>=2.5,<3.0
+pydantic-settings>=2.1,<3.0
+email-validator>=2.0,<3.0
+
+python-jose[cryptography]>=3.3,<4.0
+passlib[bcrypt]>=1.7,<2.0
+# Pin bcrypt to 3.x — passlib 1.7.4 can't read the version metadata on bcrypt 4+,
+# which makes its length-check fall back to a broken path that rejects every
+# password as ">72 bytes" even for short strings.
+bcrypt>=3.2,<4.0
+
+sqlalchemy>=2.0,<3.0
+asyncpg>=0.29,<1.0
+
+# Note: the supabase Python SDK is intentionally NOT a dep — the backend
+# talks to Supabase via the REST helper in database/supabase_client.py
+# (requests-based). Adding `supabase>=2.30` pulled `storage3>=2.30` →
+# `pyiceberg` which needs MSVC build tools on Windows for a native ext.
+requests>=2.31,<3.0
+# httpx: async HTTP client for the non-blocking Supabase data layer
+# (database/supabase_async.py). Replaces the event-loop-blocking `requests`
+# path inside async handlers. uvicorn[standard] already pulls httpx-compatible
+# deps; pinned here explicitly since we import it directly.
+httpx>=0.27,<1.0
+aiofiles>=23.0
+
+Pillow>=10.0
+pandas>=2.0
+reportlab>=4.0
+
+python-multipart>=0.0.9
+
+aiosmtplib>=3.0,<4.0
+jinja2>=3.1,<4.0
+
+pywebpush>=1.14,<2.0
+cryptography>=42.0
+anthropic>=0.39,<1.0
+twilio>=9.0,<10.0

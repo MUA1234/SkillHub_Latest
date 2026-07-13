@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <body style="font-family: system-ui, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    <h1 style="color: #047857;">Payment received{% if first_name %}, {{ first_name }}{% endif %}.</h1>
+    <p>Thanks for your payment. Here is your receipt:</p>
+    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+      <tr><td style="padding: 6px 0; color:#6b7280;">Item</td><td style="padding: 6px 0;">{{ item_title }}</td></tr>
+      <tr><td style="padding: 6px 0; color:#6b7280;">Amount</td><td style="padding: 6px 0;"><strong>{{ currency }} {{ amount_formatted }}</strong></td></tr>
+      <tr><td style="padding: 6px 0; color:#6b7280;">Method</td><td style="padding: 6px 0;">{{ method }}</td></tr>
+      <tr><td style="padding: 6px 0; color:#6b7280;">Transaction</td><td style="padding: 6px 0; font-family: monospace;">{{ transaction_id }}</td></tr>
+      <tr><td style="padding: 6px 0; color:#6b7280;">Paid at</td><td style="padding: 6px 0;">{{ paid_at }}</td></tr>
+    </table>
+    {% if is_demo %}
+      <p style="background:#fef3c7; color:#92400e; padding:10px; border-radius:8px; font-size:13px;">
+        This was a demo payment. No real funds were taken.
+      </p>
+    {% endif %}
+    <p style="color: #6b7280; font-size: 13px;">Keep this receipt for your records. Reply to this email if anything looks off.</p>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="si">
+  <body style="font-family: 'Noto Sans Sinhala', system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    <h1 style="color: #047857;">ඔබේ සැසිය ඉක්මනින් ආරම්භ වේ{% if first_name %}, {{ first_name }}{% endif %}.</h1>
+    <p><strong>{{ session_title }}</strong> ({{ teacher_name }} සමඟ) <strong>{{ when_local }}</strong> ට ආරම්භ වේ.</p>
+    <p style="margin: 32px 0;">
+      <a href="{{ join_url }}"
+         style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+        සැසිය විවෘත කරන්න
+      </a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">උපදෙස: මයික් සහ කැමරාව පරීක්ෂා කිරීමට මිනිත්තු කිහිපයක් කලින් සබැඳිය විවෘත කරන්න.</p>
+  </body>
+</html>

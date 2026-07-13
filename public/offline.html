@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SkillHub — Offline</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f9fafb;
+      color: #1f2937;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      max-width: 420px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+      padding: 2rem;
+      text-align: center;
+    }
+    h1 { margin: 0 0 0.5rem; font-size: 1.5rem; color: #1e3a8a; }
+    p { color: #4b5563; line-height: 1.5; margin: 0 0 1rem; }
+    button {
+      background: #1e3a8a;
+      color: #fff;
+      border: 0;
+      padding: 0.6rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:hover { background: #1e40af; }
+    .lang { margin-top: 1rem; font-size: 0.85rem; color: #6b7280; }
+    .lang div { margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <div class="card" role="main">
+    <h1>You are offline</h1>
+    <p>SkillHub couldn’t reach the network. Check your connection and try again.</p>
+    <button onclick="location.reload()">Retry</button>
+    <div class="lang" lang="si">
+      <div>ඔබ අන්තර්ජාලයෙන් විසන්ධි වී ඇත. නැවත උත්සාහ කරන්න.</div>
+    </div>
+    <div class="lang" lang="ta">
+      <div>நீங்கள் இணையத்துடன் இணைக்கப்படவில்லை. மீண்டும் முயற்சிக்கவும்.</div>
+    </div>
+  </div>
+</body>
+</html>

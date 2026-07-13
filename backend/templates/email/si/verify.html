@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="si">
+  <body style="font-family: 'Noto Sans Sinhala', system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    <h1 style="color: #047857;">{{ from_name }} වෙත සාදරයෙන් පිළිගනිමු{% if first_name %}, {{ first_name }}{% endif %}!</h1>
+    <p>ඔබේ ගිණුම සක්‍රීය කිරීම සඳහා කරුණාකර ඔබේ විද්‍යුත් තැපැල් ලිපිනය තහවුරු කරන්න.</p>
+    <p style="margin: 32px 0;">
+      <a href="{{ verification_url }}"
+         style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+        මගේ විද්‍යුත් තැපැල තහවුරු කරන්න
+      </a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">
+      නැතහොත් මෙම සබැඳිය ඔබේ බ්‍රවුසරයට පිටපත් කරන්න:<br>
+      <a href="{{ verification_url }}">{{ verification_url }}</a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">මෙම සබැඳිය පැය 24 කින් ඉකුත් වේ.</p>
+  </body>
+</html>

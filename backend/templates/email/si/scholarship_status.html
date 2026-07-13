@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="si">
+  <body style="font-family: 'Noto Sans Sinhala', system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    {% if approved %}
+      <h1 style="color: #047857;">ශිෂ්‍යත්වය අනුමත විය 🎉</h1>
+      <p>ශුභ ආරංචියකි{% if first_name %}, {{ first_name }}{% endif %}. <strong>{{ scholarship_title }}</strong> සඳහා ඔබේ අයදුම්පත අනුමත කර ඇත.</p>
+      <p>ඔබට <strong>{{ currency }} {{ amount_formatted }}</strong> දීමනාවක් සජීවී සැසියකට භාවිතා කිරීමට සූදානම්ව ඇත.</p>
+      <p style="margin: 32px 0;">
+        <a href="{{ applications_url }}"
+           style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+          මගේ දීමනා බලන්න
+        </a>
+      </p>
+    {% else %}
+      <h1 style="color: #b91c1c;">අයදුම්පත යාවත්කාලීන කිරීම</h1>
+      <p>ආයුබෝවන්{% if first_name %} {{ first_name }}{% endif %}, <strong>{{ scholarship_title }}</strong> සඳහා ඔබේ අයදුම්පත මෙවර අනුමත නොවීය.</p>
+      {% if reviewer_notes %}<p style="background:#f3f4f6; padding:10px; border-radius:8px;">{{ reviewer_notes }}</p>{% endif %}
+      <p>ඔබට ඕනෑම වේලාවක වෙනත් විවෘත ශිෂ්‍යත්වවලට අයදුම් කළ හැකිය.</p>
+      <p style="margin: 32px 0;">
+        <a href="{{ scholarships_url }}"
+           style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+          ශිෂ්‍යත්ව බලන්න
+        </a>
+      </p>
+    {% endif %}
+    <p style="color: #6b7280; font-size: 13px;">— {{ from_name }}</p>
+  </body>
+</html>

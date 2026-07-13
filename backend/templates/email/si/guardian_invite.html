@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="si">
+  <body style="font-family: system-ui, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    <h1 style="color: #047857;">ඔබව භාරකරුවෙකු ලෙස ආරාධනා කර ඇත</h1>
+    <p>{% if guardian_name %}ආයුබෝවන් {{ guardian_name }},{% else %}ආයුබෝවන්,{% endif %}</p>
+    <p>
+      <strong>{{ student_name }}</strong> විසින් ඔබව {{ from_name }} — ශ්‍රී ලංකාවේ ඇතුළත් කරන ඉගෙනුම් වේදිකාවේ —
+      ඔවුන්ගේ භාරකරු ලෙස ආරාධනා කර ඇත. භාරකරුවෙකු ලෙස, ඔබට ඔවුන්ගේ ප්‍රගතිය නිරීක්ෂණය
+      කිරීමට, ඉදිරි සැසි බැලීමට සහ ගුරුවරුන් සමඟ සම්බන්ධව සිටීමට හැකිය.
+    </p>
+    <p style="margin: 32px 0;">
+      <a href="{{ invite_url }}"
+         style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+        ආරාධනය පිළිගන්න
+      </a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">
+      නැතහොත් මෙම සබැඳිය ඔබේ බ්‍රවුසරයට පිටපත් කර අලවන්න:<br>
+      <a href="{{ invite_url }}">{{ invite_url }}</a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">
+      භාරකරු ගිණුමක් සෑදීමට හෝ දැනටමත් එකක් තිබේ නම් පුරනය වීමට ඔබට අසනු ඇත.
+      ඔබ මෙම ආරාධනය අපේක්ෂා නොකළේ නම්, මෙම ඊමේල් නොසලකා හරින්න — {{ student_name }}
+      සඳහා කිසිවක් වෙනස් නොවේ.
+    </p>
+  </body>
+</html>

@@ -1,0 +1,1 @@
+Reminder: {{ session_title }} at {{ when_local }}

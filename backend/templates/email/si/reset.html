@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="si">
+  <body style="font-family: 'Noto Sans Sinhala', system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+    <h1 style="color: #047857;">මුරපදය යළි පිහිටුවන්න</h1>
+    <p>{% if first_name %}ආයුබෝවන් {{ first_name }},{% else %}ආයුබෝවන්,{% endif %} ඔබේ {{ from_name }} මුරපදය යළි පිහිටුවීමට ඉල්ලීමක් අපට ලැබුණි.</p>
+    <p style="margin: 32px 0;">
+      <a href="{{ reset_url }}"
+         style="background: #047857; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">
+        මුරපදය යළි පිහිටුවන්න
+      </a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">
+      නැතහොත් මෙම සබැඳිය ඔබේ බ්‍රවුසරයට පිටපත් කරන්න:<br>
+      <a href="{{ reset_url }}">{{ reset_url }}</a>
+    </p>
+    <p style="color: #6b7280; font-size: 13px;">මෙම සබැඳිය පැයකින් ඉකුත් වේ. ඔබ ඉල්ලුවේ නැත්නම් මෙය නොසලකා හරින්න.</p>
+  </body>
+</html>
