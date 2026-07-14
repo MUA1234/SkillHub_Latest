@@ -106,8 +106,9 @@ module at a time from "proxied" to "native", then deleting the Python route.
   pre-recorded-lessons, content-categories, content/:id (+progress), conversations
   (list/messages/send/create), enrolled-courses, payment-history, events
   (list/categories/register/bookmark), forum (posts/categories/stats/detail/
-  create/vote/replies), session-recordings, join-session, set-reminder, wishlist.
-  Only `payment-history/:id/receipt` stays proxied (reportlab PDF). Fixed ~8 more
+  create/vote/replies), session-recordings, join-session, set-reminder, wishlist,
+  certificates(list/download), payment-history/:id/receipt, progress-report — all
+  native (PDF via headless Chrome, see below). Fixed ~8 more
   latent Python bugs (wrong wishlist/session_participants/reviews columns, missing
   `events.status`/`event_bookmarks`, `forum` column names + `post_category` enum,
   `live_sessions` duration computed from scheduled times, ...).
@@ -139,11 +140,21 @@ Local adapter in dev, real SMTP when `SMTP_HOST`+`SMTP_USER` are set).
   needs the *service-role* key, which isn't in the repo (Python uses a local-disk
   fallback). `SkillHub.Storage` + the upload actions in `TeacherController` are
   written and ready — set `SUPABASE_SERVICE_KEY` and wire the 3 routes to go native.
-- **PDF generation** (certificates, progress reports, receipts): reportlab + Noto
-  fonts — a heavy native-lib concern kept in Python (per the plan).
 - **Web-push** (pywebpush/VAPID) and **PayHere gateway**: credential-gated, low
   traffic; left in Python.
 - **Claude AI chatbot**: Python is the AI/ML service by architectural design.
+
+**PDF generation is now fully native.** Certificates (trilingual en/si/ta,
+landscape A4), payment receipts (student + teacher), and accessibility progress
+reports are rendered by `SkillHub.PDF` — HTML templates piped through headless
+Chrome's one-shot `--print-to-pdf`. Chrome does the font shaping, so Sinhala/Tamil
+render correctly (templates declare Noto/Nirmala fallbacks). We shell out directly
+rather than over ChromicPDF's CDP remote-debugging pipe, which relies on Unix FD
+redirection that breaks on Windows; each render uses a throwaway user-data-dir so
+concurrent jobs never collide on Chrome's singleton lock. Controllers:
+`CertificateController`, `ReceiptController`, `ProgressReportController`. No Python,
+no reportlab, no native-lib build. Verified end-to-end (200 · application/pdf ·
+correct MediaBox orientation).
 
 Everything else — every CRUD/dashboard/list/auth route — runs natively on
 Elixir/Phoenix. Toolchain: Elixir 1.20 / OTP 29 + zig 0.16, all installed
@@ -153,9 +164,8 @@ Auth login/register/forgot/reset/verify stay proxied until bcrypt (Windows SDK)
 no-op in the port (`kick_off_matching/1`) — reinstate when porting the matcher.
 
 ### Intentionally kept in Python (per the architecture plan — the AI/ML service)
-`chat_ai` (Claude), plus heavy-native-lib routes not worth reimplementing in
-Elixir yet: `certificates` + `progress_reports` (reportlab PDF), notification
-push subroutes (`pywebpush`).
+`chat_ai` (Claude), plus credential-gated integrations: notification push
+subroutes (`pywebpush`/VAPID) and the PayHere payment gateway.
 
 > Analytics ports collapse the Python N+1 loops into single SQL aggregates.
 > Porting a module = add routes + a controller/context; the proxy auto-detects

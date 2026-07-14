@@ -107,6 +107,7 @@ defmodule SkillHubWeb.Router do
     get "/teachers/courses", TeacherController, :courses
     post "/teachers/courses", TeacherController, :create_course
     get "/teachers/payment-history", TeacherController, :payments
+    get "/teachers/payment-history/:payment_id/receipt", ReceiptController, :receipt
     get "/teachers/notifications", TeacherController, :notifications
     get "/teachers/notifications/rest", TeacherController, :notifications
     put "/teachers/notifications/:notification_id/read", TeacherController, :mark_notification_read
@@ -199,6 +200,10 @@ defmodule SkillHubWeb.Router do
     get "/students/conversations/:conversation_id/messages", StudentController, :conversation_messages
     post "/students/conversations/:conversation_id/messages", StudentController, :send_message
     post "/students/conversations", StudentController, :create_conversation
+    get "/students/certificates", CertificateController, :list
+    get "/students/courses/:enrollment_id/certificate", CertificateController, :download
+    get "/students/payment-history/:payment_id/receipt", ReceiptController, :receipt
+    get "/students/progress-report", ProgressReportController, :download
     get "/students/live-sessions", StudentController, :live_sessions
     get "/students/campaigns", StudentController, :campaigns
     get "/students/pre-recorded-lessons", StudentController, :pre_recorded_lessons

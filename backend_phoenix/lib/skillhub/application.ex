@@ -20,6 +20,8 @@ defmodule SkillHub.Application do
       SkillHubWeb.Endpoint
     ]
 
+    log_pdf_availability()
+
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: SkillHub.Supervisor]
@@ -32,5 +34,16 @@ defmodule SkillHub.Application do
   def config_change(changed, _new, removed) do
     SkillHubWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  # PDF generation shells out to headless Chrome on demand (see SkillHub.PDF),
+  # so nothing needs supervising — we just note at boot whether a browser exists.
+  defp log_pdf_availability do
+    require Logger
+
+    case SkillHub.PDF.chrome_executable() do
+      nil -> Logger.info("No Chrome/Edge found — PDF generation will proxy to Python")
+      exe -> Logger.info("PDF generation ready via #{exe}")
+    end
   end
 end
