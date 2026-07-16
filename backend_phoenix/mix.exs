@@ -53,9 +53,21 @@ defmodule SkillHub.MixProject do
       {:cors_plug, "~> 3.0"},
       {:swoosh, "~> 1.16"},
       {:gen_smtp, "~> 1.2"},
-      # Vendored: builds its NIF with zig cc (no MSVC/SDK needed on this box).
-      {:bcrypt_elixir, path: "vendor/bcrypt_elixir", override: true}
+      bcrypt_dep()
     ]
+  end
+
+  # bcrypt selection is OS-dependent:
+  #  * Windows dev box has no C toolchain, so it uses the vendored copy that
+  #    builds its NIF with `zig cc` (produces bcrypt_nif.dll).
+  #  * Linux (Docker / prod) has cc, so it uses the Hex package, which builds
+  #    a normal .so via elixir_make.
+  # Both emit $2b$ hashes, so existing passlib-hashed passwords keep working.
+  defp bcrypt_dep do
+    case :os.type() do
+      {:win32, _} -> {:bcrypt_elixir, path: "vendor/bcrypt_elixir", override: true}
+      _ -> {:bcrypt_elixir, "~> 3.3", override: true}
+    end
   end
 
   # Aliases are shortcuts or tasks specific to the current project.

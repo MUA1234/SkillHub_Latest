@@ -1,0 +1,85 @@
+# ---------------------------------------------------------------------------
+# Render Blueprint — SkillHub backend as ONE free web service (Docker).
+# No credit card required. Phoenix + Python + Chromium in a single image.
+#
+# Render injects PORT at runtime; Phoenix binds to it. The Python service runs
+# on loopback :8001 (docker-entrypoint.sh) and is reached only via
+# PYTHON_BACKEND_URL. Render terminates TLS/WSS at its edge (no Caddy).
+#
+# Secrets (sync: false) are NOT stored here — set them in the Render dashboard
+# after the first deploy. Non-secret defaults are inlined below.
+# ---------------------------------------------------------------------------
+services:
+  - type: web
+    name: skillhub-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    dockerContext: .
+    plan: free
+    region: singapore            # closest free region to Supabase ap-southeast-1
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      # --- non-secret config ---
+      - key: PHX_SERVER
+        value: "true"
+      - key: MIX_ENV
+        value: prod
+      - key: PYTHON_BACKEND_URL
+        value: http://127.0.0.1:8001
+      - key: PHX_HOST
+        value: skillhub-backend.onrender.com   # update to your real Render URL
+      - key: POOL_SIZE
+        value: "10"
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: SUPABASE_BUCKET
+        value: skillhub-content
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-4-5-20251001
+      - key: PAYHERE_SANDBOX
+        value: "true"
+      - key: VAPID_SUBJECT
+        value: mailto:noreply@skillhub.lk
+      - key: EMAILS_FROM_NAME
+        value: SkillHub
+      - key: SMTP_PORT
+        value: "587"
+
+      # --- secrets: set these in the dashboard (Environment tab) ---
+      - key: SECRET_KEY            # shared JWT key — MUST match across Phoenix+Python
+        sync: false
+      - key: SECRET_KEY_BASE       # Phoenix-only: `mix phx.gen.secret`
+        sync: false
+      - key: DATABASE_URL          # Supabase SESSION pooler :5432 (not 6543)
+        sync: false
+      - key: FRONTEND_URL          # your exact Vercel origin
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PAYHERE_MERCHANT_ID
+        sync: false
+      - key: PAYHERE_MERCHANT_SECRET
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAILS_FROM_EMAIL
+        sync: false

@@ -96,8 +96,20 @@ if config_env() == :prod do
 
   config :skillhub, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  # The realtime WebSocket lives on this host, but the browser connects from the
+  # frontend origin (Vercel). Allow those origins through check_origin, else the
+  # socket handshake is rejected. Falls back to the safe default (true) when
+  # nothing is configured.
+  socket_origins =
+    [System.get_env("FRONTEND_URL"), System.get_env("CORS_ORIGINS")]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.flat_map(&String.split(&1, ",", trim: true))
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+
   config :skillhub, SkillHubWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
+    check_origin: if(socket_origins == [], do: true, else: socket_origins),
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.

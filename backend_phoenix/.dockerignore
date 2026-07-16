@@ -1,0 +1,9 @@
+_build
+deps
+.elixir_ls
+.git
+*.log
+# Windows-only vendored bcrypt (Linux build uses the Hex package)
+vendor
+test
+priv/static/cache_manifest.json

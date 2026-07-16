@@ -1,0 +1,91 @@
+# syntax=docker/dockerfile:1
+# ============================================================================
+# SkillHub backend — ONE image (works on Render or any Docker PaaS).
+#
+# Bundles everything into a single deployable unit:
+#   * the Phoenix OTP release  (auth, CRUD, realtime WS, PDF via Chromium)
+#   * the Python/FastAPI service (AI chat, web-push, PayHere, uploads)
+#   * Chromium + Noto fonts     (trilingual certificate/receipt PDFs)
+#
+# docker-entrypoint.sh starts Python on loopback :8001 and Phoenix on the
+# platform-provided $PORT in one container. Phoenix strangler-proxies the
+# Python-only routes over 127.0.0.1 — nothing but Phoenix is ever exposed.
+# The platform terminates TLS/WSS at its edge, so no Caddy is used here (the
+# Caddyfile / docker-compose.yml remain only for the alt VPS path in DEPLOY.md).
+#
+# Build context is the REPO ROOT (needs both backend_phoenix/ and backend/).
+# ============================================================================
+
+# ---- Stage 1: build the Phoenix OTP release --------------------------------
+FROM elixir:1.18-otp-27 AS phx-build
+
+ENV MIX_ENV=prod \
+    LANG=C.UTF-8
+
+# build-essential + make: the Hex bcrypt_elixir NIF compiles with cc here
+# (the vendored zig build in vendor/ is Windows-dev-only; mix.exs auto-selects
+# the Hex package on Linux).
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends build-essential git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mix local.hex --force && mix local.rebar --force
+
+WORKDIR /app
+
+# Deps first, for layer caching.
+COPY backend_phoenix/mix.exs backend_phoenix/mix.lock ./
+COPY backend_phoenix/config config
+RUN mix deps.get --only prod && mix deps.compile
+
+# Application code.
+COPY backend_phoenix/lib lib
+COPY backend_phoenix/priv priv
+RUN mix compile && mix release
+
+# ---- Stage 2: runtime — Python base + Elixir release + Chromium ------------
+# Python base gives us the FastAPI runtime for free; the OTP release bundles its
+# own ERTS, so no Erlang install is needed here.
+FROM python:3.12-slim-bookworm AS app
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
+    CHROME_BIN=/usr/bin/chromium \
+    PHX_SERVER=true \
+    MIX_ENV=prod
+
+# chromium + fonts-noto*  -> SkillHub.PDF shells out to Chromium (--print-to-pdf)
+# libstdc++6/openssl/ncurses -> shared libs the OTP release needs at runtime
+# build-essential          -> temporary, for any source-only Python wheels
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        chromium \
+        fonts-noto fonts-noto-cjk fonts-noto-color-emoji \
+        libstdc++6 openssl libncurses6 locales ca-certificates \
+    && sed -i '/en_US.UTF-8/s/^# //' /etc/locale.gen && locale-gen
+
+WORKDIR /app
+
+# --- Python service + its deps ---
+COPY backend/requirements.txt /app/python/requirements.txt
+RUN pip install --upgrade pip \
+    && pip install -r /app/python/requirements.txt \
+    && apt-get purge -y --auto-remove build-essential \
+    && rm -rf /var/lib/apt/lists/*
+COPY backend/ /app/python/
+
+# --- Phoenix release (self-contained, bundles ERTS) ---
+COPY --from=phx-build /app/_build/prod/rel/skillhub /app/phoenix
+
+# --- Start both under one entrypoint ---
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh \
+    && useradd --system --create-home --home-dir /home/app app \
+    && chown -R app: /app
+USER app
+
+# Phoenix binds to the platform-provided $PORT; Python stays on loopback :8001.
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

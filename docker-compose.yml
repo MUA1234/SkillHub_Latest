@@ -1,0 +1,53 @@
+# ---------------------------------------------------------------------------
+# SkillHub backend — single host, three containers:
+#   caddy   : public entrypoint, terminates TLS (Let's Encrypt), proxies to
+#             Phoenix. Handles WebSocket upgrades for the realtime channel.
+#   phoenix : the gateway. Serves native routes + strangler-proxies the rest
+#             to `python` over the internal network.
+#   python  : FastAPI (AI / uploads / web-push / PayHere). Never exposed.
+#
+# The frontend lives on Vercel and talks to https://$API_DOMAIN.
+# ---------------------------------------------------------------------------
+services:
+  phoenix:
+    build: ./backend_phoenix
+    restart: unless-stopped
+    env_file: ./.env.phoenix
+    environment:
+      PORT: "8000"
+      PHX_SERVER: "true"
+      MIX_ENV: prod
+      # Reach the Python service by its compose service name.
+      PYTHON_BACKEND_URL: "http://python:8001"
+    depends_on:
+      - python
+    expose:
+      - "8000"
+
+  python:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./.env.python
+    environment:
+      PORT: "8001"
+    expose:
+      - "8001"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - phoenix
+
+volumes:
+  caddy_data:
+  caddy_config:

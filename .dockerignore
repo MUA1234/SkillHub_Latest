@@ -1,0 +1,24 @@
+# Fly builds from the repo root (Dockerfile.fly needs both backend dirs), so
+# keep the frontend + build junk out of the upload context.
+.git
+node_modules
+**/node_modules
+.next
+out
+coverage
+playwright-report
+test-results
+e2e
+*.log
+
+# Backend build artifacts (rebuilt inside the image)
+backend_phoenix/_build
+backend_phoenix/deps
+backend_phoenix/.elixir_ls
+**/__pycache__
+**/*.pyc
+backend/.pytest_cache
+
+# Local env files — never bake secrets into the image; use `fly secrets`
+.env
+.env.*

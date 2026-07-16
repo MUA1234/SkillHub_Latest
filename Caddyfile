@@ -1,0 +1,7 @@
+# Caddy auto-provisions and renews a Let's Encrypt cert for $API_DOMAIN.
+# reverse_proxy transparently forwards WebSocket upgrades, so the Phoenix
+# /socket realtime channel works over WSS with no extra config.
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy phoenix:8000
+}
