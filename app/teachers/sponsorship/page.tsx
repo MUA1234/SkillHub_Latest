@@ -143,7 +143,7 @@ export default function TeacherSponsorshipPage() {
         userEmail={userEmail}
       />
       <DashboardSidebar userRole={userRole as 'student' | 'teacher' | 'sponsor'} />
-      <main className="pt-16 p-4 sm:p-6 lg:p-8 min-h-screen">
+      <main className="pt-16 sm:pt-16 lg:pt-16 p-4 sm:p-6 lg:p-8 min-h-screen">
         <div className="pt-6 lg:pt-0 max-w-5xl mx-auto">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
             <div className="flex items-start justify-between flex-wrap gap-4 mb-6">

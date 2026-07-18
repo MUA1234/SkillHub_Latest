@@ -291,7 +291,7 @@ export default function TeacherAccessibilitySpecialization() {
     <div className="min-h-screen bg-cream-100">
       <AuthenticatedNavigation userRole="teacher" userName="" userEmail="" />
       <DashboardSidebar userRole="teacher" />
-      <main className="pt-16 p-4 sm:p-6 lg:p-8 min-h-screen">
+      <main className="pt-16 sm:pt-16 lg:pt-16 p-4 sm:p-6 lg:p-8 min-h-screen">
         <div className="pt-6 lg:pt-0">
       <div className="max-w-4xl mx-auto">
         {}

@@ -55,7 +55,7 @@ export default function PeerMatchesPage() {
     <div className="min-h-screen bg-cream-100">
       <AuthenticatedNavigation userRole="student" userName="" userEmail="" />
       <DashboardSidebar userRole="student" />
-      <main className="pt-16 p-4 sm:p-6 lg:p-8 min-h-screen">
+      <main className="pt-16 sm:pt-16 lg:pt-16 p-4 sm:p-6 lg:p-8 min-h-screen">
         <div className="max-w-5xl mx-auto space-y-6 pt-6">
           <PageHeader
             eyebrow={<><DoodleSparkle className="w-4" /> Peer matches</>}

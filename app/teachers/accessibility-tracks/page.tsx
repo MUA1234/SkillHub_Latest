@@ -184,7 +184,7 @@ export default function TeacherAccessibilityTracksPage() {
     <div className="min-h-screen bg-cream-100">
       <AuthenticatedNavigation userRole="teacher" userName={userName} userEmail={userEmail} />
       <DashboardSidebar userRole="teacher" />
-      <main className="pt-16 p-4 sm:p-6 lg:p-8 min-h-screen">
+      <main className="pt-16 sm:pt-16 lg:pt-16 p-4 sm:p-6 lg:p-8 min-h-screen">
         <div className="pt-6 lg:pt-0 max-w-3xl mx-auto">
           <div className="mb-6">
             <PageHeader title="Accessibility" accent="tracks" />
