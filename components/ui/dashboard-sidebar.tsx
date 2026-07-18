@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   LayoutDashboard,
   BookOpen,
@@ -156,15 +156,33 @@ function SidebarNav({
   );
 }
 
+const scrollStorageKey = (role: Role) => `dashboard-sidebar-scroll:${role}`;
+
 export default function DashboardSidebar({ userRole }: DashboardSidebarProps) {
   const pathname = usePathname();
   const accent = roleAccent[userRole];
   const items = links[userRole] || [];
   const [open, setOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  // The sidebar is rendered fresh by every page (no shared layout), so its
+  // scroll container remounts on each navigation and would otherwise reset
+  // to the top — restore the last position before paint so it doesn't flash.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const saved = sessionStorage.getItem(scrollStorageKey(userRole));
+    if (saved) el.scrollTop = parseInt(saved, 10);
+  }, [userRole]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (el) sessionStorage.setItem(scrollStorageKey(userRole), String(el.scrollTop));
+  };
 
   useEffect(() => {
     document.body.classList.add("has-dashboard-sidebar");
@@ -198,7 +216,7 @@ export default function DashboardSidebar({ userRole }: DashboardSidebarProps) {
 
       {}
       <aside className="hidden lg:flex lg:flex-col fixed left-0 top-16 bottom-0 w-64 border-r-2 border-espresso/10 bg-cream-50 z-20">
-        <div className="flex-1 overflow-y-auto py-4">
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-4">
           <SidebarNav items={items} accent={accent} pathname={pathname} />
         </div>
         <div className="border-t-2 border-espresso/10 px-4 py-3 text-[11px] font-bold text-espresso/55 uppercase tracking-[0.15em]">
