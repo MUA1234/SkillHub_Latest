@@ -13,6 +13,12 @@ bcrypt>=3.2,<4.0
 
 sqlalchemy>=2.0,<3.0
 asyncpg>=0.29,<1.0
+# SQLAlchemy's async engine (create_async_engine/AsyncSession, used in
+# database/database.py) needs greenlet at runtime but doesn't declare it as a
+# hard dep unless installed via the `sqlalchemy[asyncio]` extra — pin it
+# explicitly so a fresh `pip install -r requirements.txt` doesn't silently
+# 503 every async DB call.
+greenlet>=3.1,<4.0
 
 # Note: the supabase Python SDK is intentionally NOT a dep — the backend
 # talks to Supabase via the REST helper in database/supabase_client.py

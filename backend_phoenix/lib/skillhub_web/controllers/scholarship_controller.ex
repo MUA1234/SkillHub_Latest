@@ -7,6 +7,7 @@ defmodule SkillHubWeb.ScholarshipController do
   trigger); email/SMS/push fan-out stays in the Python service for now.
   """
   use SkillHubWeb, :controller
+  require Logger
 
   import SkillHubWeb.AuthHelpers
   alias SkillHub.SQL
@@ -500,7 +501,26 @@ defmodule SkillHubWeb.ScholarshipController do
     :ok
   end
 
-  defp kick_off_matching(_id), do: :ok
+  # Matching (candidate-finding by disability/location/grade) stays in
+  # Python — the filters are non-trivial to re-translate faithfully and
+  # scholarships isn't slated for the next migration phase. Fire-and-forget
+  # so a slow/down Python service never blocks or fails the sponsor's
+  # create/update response; Task.start/1 is unlinked, so a crash here can't
+  # take down this controller process.
+  defp kick_off_matching(id) do
+    Task.start(fn ->
+      base = Application.fetch_env!(:skillhub, :python_backend)[:base_url] |> String.trim_trailing("/")
+      url = base <> "/api/v1/internal/scholarships/#{id}/match"
+
+      case Req.post(url: url, retry: false, connect_options: [timeout: 5_000], receive_timeout: 15_000) do
+        {:ok, %{status: status}} when status in 200..299 -> :ok
+        {:ok, %{status: status}} -> Logger.warning("Scholarship matcher for #{id} returned #{status}")
+        {:error, reason} -> Logger.warning("Scholarship matcher call for #{id} failed: #{inspect(reason)}")
+      end
+    end)
+
+    :ok
+  end
 
   defp expired?(nil), do: false
   defp expired?(ts) do

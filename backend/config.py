@@ -121,10 +121,6 @@ class Settings(BaseSettings):
     emails_from_name: str = os.getenv("EMAILS_FROM_NAME", "SkillHub")
     emails_enabled: bool = os.getenv("EMAILS_ENABLED", "auto").lower() in {"true", "1", "yes"}
 
-    stripe_publishable_key: Optional[str] = None
-    stripe_secret_key: Optional[str] = None
-    stripe_webhook_secret: Optional[str] = None
-
     vapid_public_key: Optional[str] = os.getenv("VAPID_PUBLIC_KEY")
     vapid_private_key: Optional[str] = os.getenv("VAPID_PRIVATE_KEY")
     vapid_subject: str = os.getenv("VAPID_SUBJECT", "mailto:noreply@skillhub.lk")

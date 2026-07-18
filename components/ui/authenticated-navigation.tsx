@@ -41,7 +41,6 @@ import {
   UserPlus,
   MapPin,
   FileText,
-  Briefcase,
   Megaphone,
   Network,
   HelpCircle,
@@ -66,6 +65,15 @@ interface AuthenticatedNavigationProps {
   userName: string;
   userEmail: string;
 }
+
+// Most roles pluralize to their route prefix (student -> /students), but
+// admin and guardian don't (/admin, /guardian) — this component is only
+// rendered for student/teacher/sponsor today, but keeping this defensive
+// avoids repeating the pluralization bug wherever it's reused next (see
+// app/guardian/dashboard/page.tsx's note about a future GuardianNavigation).
+const ROLE_PATH_OVERRIDES: Record<string, string> = { admin: '/admin', guardian: '/guardian' };
+const roleRoute = (role: string, path: string) =>
+  `${ROLE_PATH_OVERRIDES[role] ?? `/${role}s`}/${path}`;
 
 const AuthenticatedNavigation: React.FC<AuthenticatedNavigationProps> = ({
   userRole,
@@ -236,10 +244,7 @@ const AuthenticatedNavigation: React.FC<AuthenticatedNavigationProps> = ({
     if (userRole !== 'student') {
       commonItems.push({ name: 'Home', href: '/', icon: Home });
     }
-    commonItems.push(
-      { name: 'Services', href: `/${userRole}s/services`, icon: Briefcase },
-      { name: 'Dashboard', href: `/${userRole}s/dashboard`, icon: BookOpen }
-    );
+    commonItems.push({ name: 'Dashboard', href: roleRoute(userRole, 'dashboard'), icon: BookOpen });
 
     const roleSpecificItems: { [key: string]: NavigationItem[] } = {
       teacher: [
@@ -307,8 +312,8 @@ const AuthenticatedNavigation: React.FC<AuthenticatedNavigationProps> = ({
     };
 
     const endItems: NavigationItem[] = [
-      { name: 'About Us', href: `/${userRole}s/about`, icon: Users },
-      { name: 'Contact Us', href: `/${userRole}s/contact`, icon: Phone }
+      { name: 'About Us', href: roleRoute(userRole, 'about'), icon: Users },
+      { name: 'Contact Us', href: roleRoute(userRole, 'contact'), icon: Phone }
     ];
 
     return [
@@ -581,7 +586,7 @@ const AuthenticatedNavigation: React.FC<AuthenticatedNavigationProps> = ({
 
                     <motion.div whileHover={{ x: 5 }}>
                       <Link
-                        href={`/${userRole}s/profile`}
+                        href={roleRoute(userRole, 'profile')}
                         className="flex items-center space-x-3 px-4 py-3 text-sm font-semibold text-espresso hover:text-terracotta hover:bg-cream-100"
                         onClick={() => setActiveDropdown(null)}
                       >
@@ -592,7 +597,7 @@ const AuthenticatedNavigation: React.FC<AuthenticatedNavigationProps> = ({
 
                     <motion.div whileHover={{ x: 5 }}>
                       <Link
-                        href={`/${userRole}s/settings`}
+                        href={roleRoute(userRole, 'settings')}
                         className="flex items-center space-x-3 px-4 py-3 text-sm font-semibold text-espresso hover:text-terracotta hover:bg-cream-100"
                         onClick={() => setActiveDropdown(null)}
                       >

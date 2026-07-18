@@ -862,3 +862,28 @@ def _kick_off_matching(scholarship_id: str) -> None:
         notify_eligible_students(scholarship_id)
     except Exception as exc:
         logger.warning("Matcher run for %s failed: %s", scholarship_id, exc)
+
+
+@router.post("/internal/scholarships/{scholarship_id}/match")
+def trigger_scholarship_match(scholarship_id: str) -> Dict[str, int]:
+    """Fire the candidate-student matcher for a scholarship.
+
+    Called internally by the Phoenix gateway (fire-and-forget) after a
+    sponsor opens/updates a scholarship — scholarship create/update itself
+    is now natively handled by Phoenix, so this is the hand-off point back
+    to Python for the matching logic, which stays here since its filters
+    aren't a good fit for a straight SQL re-translation.
+
+    Deliberately unauthenticated: the Python service is never exposed
+    outside the docker network (see docker-compose.yml), the same trust
+    model the strangler proxy already relies on for every proxied route.
+    Do not add auth here without also revisiting that model.
+    """
+    try:
+        from services.scholarship_matcher import notify_eligible_students
+        notified = notify_eligible_students(scholarship_id)
+    except Exception as exc:
+        logger.warning("Matcher run for %s failed: %s", scholarship_id, exc)
+        notified = 0
+
+    return {"notified": notified}

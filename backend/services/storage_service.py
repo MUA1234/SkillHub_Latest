@@ -3,6 +3,7 @@ from typing import Optional, Tuple, List
 import uuid
 import os
 import asyncio
+import logging
 from datetime import datetime
 import aiofiles
 from PIL import Image
@@ -12,6 +13,8 @@ from pathlib import Path
 
 from config import settings
 from database.supabase_client import get_supabase_client
+
+logger = logging.getLogger(__name__)
 
 class StorageService:
     """Service for handling file uploads and storage operations"""
@@ -212,7 +215,7 @@ class StorageService:
             return thumbnail_result.get("public_url")
             
         except Exception as e:
-            print(f"Failed to generate thumbnail: {e}")
+            logger.warning(f"Failed to generate thumbnail: {e}")
             return None
     
     @staticmethod
@@ -241,7 +244,7 @@ class StorageService:
             return f"/storage/{thumbnail_path}"
             
         except Exception as e:
-            print(f"Failed to generate local thumbnail: {e}")
+            logger.warning(f"Failed to generate local thumbnail: {e}")
             return None
     
     @staticmethod
@@ -262,7 +265,7 @@ class StorageService:
             return not bool(result.error)
             
         except Exception as e:
-            print(f"Failed to delete file: {e}")
+            logger.warning(f"Failed to delete file: {e}")
             return False
     
     @staticmethod
@@ -291,7 +294,7 @@ class StorageService:
             return result.data
             
         except Exception as e:
-            print(f"Failed to get file info: {e}")
+            logger.warning(f"Failed to get file info: {e}")
             return None
 
 class AvatarService:
