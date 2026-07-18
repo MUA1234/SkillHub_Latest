@@ -90,7 +90,8 @@ export default function AuthPage() {
         });
         setCurrentUser(response.user);
         const userRole = response.user.role;
-        router.push(`/${userRole}s/dashboard`);
+        const dashboardPath = userRole === 'admin' ? '/admin/dashboard' : `/${userRole}s/dashboard`;
+        router.push(dashboardPath);
       } else if (step === 'register' && selectedRole) {
         const user = await apiClient.register({
           email: formData.email,
