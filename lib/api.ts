@@ -1,5 +1,24 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// ngrok's free tier serves a "you're about to visit..." HTML interstitial to
+// browser-like requests instead of proxying to the tunnel target, which has
+// no CORS headers and gets blocked by the browser. This header (ngrok's own
+// documented escape hatch) makes ngrok skip that page. Harmless against a
+// non-ngrok backend — it's just an extra header the server ignores.
+if (typeof window !== "undefined") {
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.startsWith(API_BASE_URL)) {
+      init = {
+        ...init,
+        headers: { ...(init.headers || {}), "ngrok-skip-browser-warning": "true" },
+      };
+    }
+    return originalFetch(input, init);
+  };
+}
+
 export interface User {
   id: string;
   email: string;

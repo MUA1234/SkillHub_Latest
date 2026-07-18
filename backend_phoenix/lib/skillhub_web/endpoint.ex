@@ -44,7 +44,8 @@ defmodule SkillHubWeb.Endpoint do
   # the proxy so upstream CORS headers are stripped and never duplicated.
   plug CORSPlug,
     origin: &SkillHubWeb.cors_origins/0,
-    credentials: true
+    credentials: true,
+    headers: ["*"]
 
   # Strangler gateway: forwards any non-natively-ported route to Python using
   # the RAW body — so it must run before Plug.Parsers.
