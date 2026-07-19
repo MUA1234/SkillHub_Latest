@@ -140,8 +140,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'SkillHub';
   const options = {
     body: data.body || '',
-    icon: data.icon || '/images/logo.png',
-    badge: '/images/logo.png',
+    icon: data.icon || '/skillhub-logo.png',
+    badge: '/skillhub-logo.png',
     // `tag` lets a fresh notification with the same tag replace an older
     // one — e.g. multiple "scholarship_match" pushes collapse into the
     // most recent rather than stacking.

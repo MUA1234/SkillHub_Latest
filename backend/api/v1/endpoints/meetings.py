@@ -819,13 +819,32 @@ async def get_chat_messages(
         if response.status_code == 200:
             messages = response.json()
             messages.reverse()
+
+            # meeting_chat_messages only stores user_id — ChatPanel.tsx reads
+            # m.user_name / m.sender_name and always fell back to the
+            # generic "User" default for every message. Batch-resolve real
+            # names instead of leaving it to the frontend.
+            from database.supabase_client import SupabaseREST
+            user_ids = [m.get("user_id") for m in messages if m.get("user_id")]
+            profiles = SupabaseREST.select_in(
+                "user_profiles", "user_id", user_ids, "user_id,first_name,last_name"
+            ) or []
+            names_by_id = {
+                str(p.get("user_id")): (
+                    " ".join(x for x in [p.get("first_name"), p.get("last_name")] if x) or None
+                )
+                for p in profiles
+            }
+            for m in messages:
+                m["user_name"] = names_by_id.get(str(m.get("user_id"))) or "User"
+
             return {"messages": messages}
         else:
             raise HTTPException(
                 status_code=response.status_code,
                 detail=f"Failed to fetch chat messages: {response.text}"
             )
-            
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

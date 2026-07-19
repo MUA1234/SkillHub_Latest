@@ -36,19 +36,24 @@ def filter_params(filters: Optional[Dict[str, Any]]) -> QueryParams:
 
     - ``{"col": v}``              → ``col=eq.v``
     - ``{"col.gte": v}``          → ``col=gte.v``  (any operator after the dot)
-    - the value is left raw; httpx percent-encodes it on send (so ``+`` inside
-      ISO timestamps survives, which was the bug the sync client hand-encoded
-      around).
+    - ``{"col": None}``           → ``col=is.null`` (PostgREST's ``eq.`` does a
+      literal string comparison, so without this a None filter silently
+      matched nothing instead of erroring — see the sync client's identical
+      bug, which broke every push-notification send via
+      ``{"revoked_at": None}``)
+    - non-None values are left raw; httpx percent-encodes them on send (so
+      ``+`` inside ISO timestamps survives, which was the bug the sync
+      client hand-encoded around).
     """
     params: QueryParams = []
     if not filters:
         return params
     for key, value in filters.items():
-        if "." in key:
-            col, op = key.rsplit(".", 1)
-            params.append((col, f"{op}.{value}"))
+        col, op = key.rsplit(".", 1) if "." in key else (key, "eq")
+        if value is None:
+            params.append((col, "is.null"))
         else:
-            params.append((key, f"eq.{value}"))
+            params.append((col, f"{op}.{value}"))
     return params
 
 

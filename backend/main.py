@@ -61,6 +61,21 @@ async def _reminder_loop():
                 ) or []
                 for s in rows:
                     sid = str(s.get("id"))
+
+                    teacher_name = ""
+                    teacher_id = str(s.get("teacher_id") or "")
+                    if teacher_id:
+                        tp = SupabaseREST.select_one(
+                            "teacher_profiles", "user_id", {"id": teacher_id}
+                        ) or {}
+                        tprof = SupabaseREST.select_one(
+                            "user_profiles", "first_name,last_name",
+                            {"user_id": str(tp.get("user_id") or "")},
+                        ) or {}
+                        teacher_name = " ".join(
+                            x for x in [tprof.get("first_name"), tprof.get("last_name")] if x
+                        )
+
                     participants = SupabaseREST.select(
                         "session_participants", "user_id", {"session_id": sid}
                     ) or []
@@ -83,7 +98,7 @@ async def _reminder_loop():
                                 to_email=email_addr,
                                 first_name=prof.get("first_name"),
                                 session_title=str(s.get("title") or ""),
-                                teacher_name="",
+                                teacher_name=teacher_name,
                                 when_local=str(s.get("scheduled_start") or ""),
                                 join_url=f"/students/meeting-room/{sid}",
                                 lang=lang_row.get("preferred_language"),

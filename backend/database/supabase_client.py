@@ -29,6 +29,28 @@ class SupabaseREST:
     """Supabase REST API helper for database operations"""
 
     @staticmethod
+    def _filter_clause(key: str, value: Any) -> str:
+        """Build one `col=op.value` PostgREST filter clause.
+
+        `None` must become `is.null` — PostgREST's `eq.` operator does a
+        literal string comparison, so `eq.None` (the old unconditional
+        `str(value)` behavior) silently matches nothing instead of erroring,
+        which made every `{"col": None}` filter look like "no results" no
+        matter how much real data existed (e.g. every push-notification send
+        via `{"revoked_at": None}`).
+        """
+        from urllib.parse import quote
+
+        if '.' in key:
+            col, op = key.rsplit('.', 1)
+        else:
+            col, op = key, 'eq'
+
+        if value is None:
+            return f"{col}=is.null"
+        return f"{col}={op}.{quote(str(value), safe='')}"
+
+    @staticmethod
     def _get_headers():
         """Get headers for Supabase requests"""
         auth_key = settings.supabase_service_key if settings.supabase_service_key and settings.supabase_service_key != "SERVICE_ROLE_KEY_HERE" else settings.supabase_key
@@ -50,14 +72,8 @@ class SupabaseREST:
             url = f"{settings.supabase_url}/rest/v1/{table}?select={columns}"
 
             if filters:
-                from urllib.parse import quote
                 for key, value in filters.items():
-                    encoded = quote(str(value), safe='')
-                    if '.' in key:
-                        col, op = key.rsplit('.', 1)
-                        url += f"&{col}={op}.{encoded}"
-                    else:
-                        url += f"&{key}=eq.{encoded}"
+                    url += f"&{SupabaseREST._filter_clause(key, value)}"
 
             if order:
                 url += f"&order={order}"
@@ -153,11 +169,7 @@ class SupabaseREST:
             url = f"{settings.supabase_url}/rest/v1/{table}?"
 
             for key, value in filters.items():
-                if '.' in key:
-                    col, op = key.rsplit('.', 1)
-                    url += f"&{col}={op}.{value}"
-                else:
-                    url += f"&{key}=eq.{value}"
+                url += f"&{SupabaseREST._filter_clause(key, value)}"
 
             response = _session.patch(url, headers=SupabaseREST._get_headers(), json=data, timeout=15)
 
@@ -180,7 +192,7 @@ class SupabaseREST:
             url = f"{settings.supabase_url}/rest/v1/{table}?"
 
             for key, value in filters.items():
-                url += f"&{key}=eq.{value}"
+                url += f"&{SupabaseREST._filter_clause(key, value)}"
 
             response = _session.delete(url, headers=SupabaseREST._get_headers(), timeout=15)
             return response.status_code in [200, 204]
@@ -198,11 +210,7 @@ class SupabaseREST:
 
             if filters:
                 for key, value in filters.items():
-                    if '.' in key:
-                        col, op = key.rsplit('.', 1)
-                        url += f"&{col}={op}.{value}"
-                    else:
-                        url += f"&{key}=eq.{value}"
+                    url += f"&{SupabaseREST._filter_clause(key, value)}"
 
             response = _session.head(url, headers=headers, timeout=15)
 

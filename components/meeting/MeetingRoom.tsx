@@ -38,7 +38,7 @@ export function MeetingRoom({ meetingId, userId, userName, onLeave, isHost = fal
   const [reducedMotion, setReducedMotion] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
 
-  const { effectiveAdaptations, hasDisability } = useAdaptiveAccessibility();
+  const { effectiveAdaptations, hasDisability, updateOverride } = useAdaptiveAccessibility();
 
   const {
     isConnected,
@@ -429,8 +429,7 @@ export function MeetingRoom({ meetingId, userId, userName, onLeave, isHost = fal
             layout={meetingLayout}
             keyboardOnly={keyboardOnlyMode}
             captionsEnabled={captionsEnabled}
-            onToggleCaptions={() => {
-            }}
+            onToggleCaptions={() => updateOverride('captionsEnabled', !captionsEnabled)}
           />
         </>
       )}
