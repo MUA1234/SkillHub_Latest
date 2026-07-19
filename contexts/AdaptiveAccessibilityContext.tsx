@@ -189,6 +189,32 @@ function applyAdaptationsToDOM(adaptations: AdaptationProfile) {
 }
 
 
+// Pushes the assessment result to POST /accessibility/disability-profile so
+// it's visible server-side (teacher search-by-specialization, sponsor
+// disability-breakdown analytics, content filtering) — previously this
+// context only ever wrote to localStorage.
+async function syncDisabilitiesToServer(disabilities: InferredDisability[]) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+  if (!token) return;
+
+  try {
+    const sorted = [...disabilities].sort((a, b) => b.confidence - a.confidence);
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/accessibility/disability-profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        has_disability: disabilities.length > 0,
+        disability_types: disabilities.map((d) => d.type),
+        primary_disability: sorted[0]?.type,
+        severity_levels: Object.fromEntries(disabilities.map((d) => [d.type, d.severity])),
+        onboarding_completed: true,
+      }),
+    });
+  } catch (error) {
+    console.error('Failed to sync accessibility profile to server:', error);
+  }
+}
+
 interface AdaptiveAccessibilityProviderProps {
   children: ReactNode;
 }
@@ -243,20 +269,66 @@ export function AdaptiveAccessibilityProvider({ children }: AdaptiveAccessibilit
     setProfile(newProfile);
     localStorage.setItem('a11y_profile', JSON.stringify(newProfile));
 
+    // Best-effort — during signup this fires before the student has logged
+    // in (register() doesn't set a token), so there's often nothing to sync
+    // to yet. loadProfile() picks up the localStorage copy and pushes it on
+    // first authenticated load instead.
+    syncDisabilitiesToServer(result.inferredDisabilities);
   }, []);
 
   const loadProfile = useCallback(async (userId: string) => {
     setIsLoading(true);
     try {
       const savedProfile = localStorage.getItem('a11y_profile');
+      let localParsed: UserAccessibilityProfile | null = null;
       if (savedProfile) {
         const parsed = JSON.parse(savedProfile);
-        if (parsed.userId === userId) {
-          setProfile(parsed);
-          return;
+        if (parsed.userId === userId) localParsed = parsed;
+      }
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+      if (token) {
+        try {
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/accessibility/disability-profile`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.profile?.has_disability) {
+              // Server has a real profile — it's the source of truth.
+              const severityLevels = data.profile.severity_levels || {};
+              const serverDisabilities: InferredDisability[] = (data.profile.disability_types || []).map(
+                (type: DisabilityType) => ({
+                  type,
+                  confidence: 1,
+                  severity: severityLevels[type] || 'moderate',
+                })
+              );
+              const merged: UserAccessibilityProfile = {
+                userId,
+                hasCompletedAssessment: true,
+                inferredDisabilities: serverDisabilities,
+                adaptationProfile: localParsed?.adaptationProfile || DEFAULT_ADAPTATIONS,
+                customOverrides: localParsed?.customOverrides || {},
+                lastUpdated: new Date().toISOString(),
+              };
+              setProfile(merged);
+              localStorage.setItem('a11y_profile', JSON.stringify(merged));
+              return;
+            } else if (localParsed?.hasCompletedAssessment) {
+              // Local has a completed assessment the server never received
+              // (synced before the student had a token) — push it now.
+              syncDisabilitiesToServer(localParsed.inferredDisabilities);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load accessibility profile from server:', error);
         }
       }
 
+      if (localParsed) {
+        setProfile(localParsed);
+      }
     } catch (error) {
       console.error('Failed to load profile:', error);
     } finally {

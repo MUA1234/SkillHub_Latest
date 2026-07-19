@@ -67,7 +67,7 @@ defmodule SkillHubWeb.GuardianController do
     if truthy(link["can_view_progress"]) do
       enrollments =
         SQL.json_all(
-          "select to_jsonb(e) as row from public.course_enrollments e where e.student_id = $1::uuid order by e.last_activity_at desc nulls last limit 20",
+          "select to_jsonb(e) as row from public.course_enrollments e where e.student_id = $1::uuid order by e.last_accessed desc nulls last limit 20",
           [student_id]
         )
 
@@ -128,7 +128,14 @@ defmodule SkillHubWeb.GuardianController do
       convos =
         safe_list(fn ->
           SQL.json_all(
-            "select to_jsonb(c) as row from public.conversations c where c.participant_ids @> array[$1::uuid] order by c.last_message_at desc nulls last limit 10",
+            """
+            select to_jsonb(c) || jsonb_build_object(
+              'last_message', (select content from public.messages m where m.conversation_id = c.id order by m.created_at desc limit 1)
+            ) as row
+            from public.conversations c
+            where c.participant_1 = $1::uuid or c.participant_2 = $1::uuid
+            order by c.last_message_at desc nulls last limit 10
+            """,
             [student_id]
           )
         end)

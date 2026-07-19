@@ -221,6 +221,8 @@ const TeacherSchedulePage: React.FC = () => {
   const [createAppointmentLoading, setCreateAppointmentLoading] = useState(false);
   const [createAvailabilityLoading, setCreateAvailabilityLoading] = useState(false);
   const [applyTemplateLoading, setApplyTemplateLoading] = useState(false);
+  const [templateStartDate, setTemplateStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [templateWeeksCount, setTemplateWeeksCount] = useState(4);
 
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
 
@@ -642,14 +644,7 @@ const TeacherSchedulePage: React.FC = () => {
         notes: newAvailabilityData.notes
       };
 
-      const createAvailabilityFn =
-        (apiClient as any).createTeacherAvailability ||
-        (apiClient as any).createAvailability;
-
-      if (typeof createAvailabilityFn === 'function') {
-        await createAvailabilityFn(payload);
-      } else {
-      }
+      await apiClient.createAvailabilityBlock(payload);
 
       setShowAvailabilityModal(false);
       await fetchScheduleData();
@@ -667,16 +662,16 @@ const TeacherSchedulePage: React.FC = () => {
       setApplyTemplateLoading(true);
       setError('');
 
-      const applyTemplateFn =
-        (apiClient as any).applyScheduleTemplate ||
-        (apiClient as any).applyTemplate;
-
-      if (typeof applyTemplateFn === 'function') {
-        await applyTemplateFn({ template_id: template.id });
-      } else {
-      }
+      const result = await apiClient.bulkApplyScheduleTemplate({
+        template_id: template.id,
+        start_date: templateStartDate,
+        weeks_count: templateWeeksCount,
+      });
 
       setShowTemplateModal(false);
+      if (result?.created === 0) {
+        setError('Template applied, but no availability blocks were created for that date range.');
+      }
       await fetchScheduleData();
     } catch (err: unknown) {
       const message =
@@ -1347,6 +1342,28 @@ const TeacherSchedulePage: React.FC = () => {
                 </button>
               </div>
               <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+                <div className="grid grid-cols-2 gap-3 pb-3 border-b">
+                  <div>
+                    <label className="block text-xs font-medium text-espresso/70 mb-1">Start date</label>
+                    <input
+                      type="date"
+                      value={templateStartDate}
+                      onChange={(e) => setTemplateStartDate(e.target.value)}
+                      className="w-full p-2 border rounded text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-espresso/70 mb-1">Weeks</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={26}
+                      value={templateWeeksCount}
+                      onChange={(e) => setTemplateWeeksCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-full p-2 border rounded text-sm"
+                    />
+                  </div>
+                </div>
                 {(scheduleData?.templates?.length ?? 0) === 0 && (
                   <div className="text-sm text-espresso/55">No templates available.</div>
                 )}

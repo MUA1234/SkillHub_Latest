@@ -34,6 +34,7 @@ import {
 
 interface ContentItem {
   id: string;
+  courseId: string;
   title: string;
   type: string;
   subject: string;
@@ -57,6 +58,27 @@ interface FolderItem {
   icon: any;
 }
 
+// course_content.file_size is a free-text field like "2.4 GB" / "450 KB" —
+// same format the real upload flow (app/teachers/content/upload) writes.
+const parseSizeToMB = (sizeStr?: string): number => {
+  if (!sizeStr) return 0;
+  const match = sizeStr.match(/([\d.]+)\s*(KB|MB|GB)/i);
+  if (!match) return 0;
+  const value = parseFloat(match[1]);
+  const unit = match[2].toUpperCase();
+  if (unit === 'GB') return value * 1024;
+  if (unit === 'KB') return value / 1024;
+  return value;
+};
+
+const inferContentType = (file: File): string => {
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('audio/')) return 'audio';
+  if (file.type.includes('presentation') || /\.(ppt|pptx)$/i.test(file.name)) return 'presentation';
+  return 'document';
+};
+
 const ContentManagementPage = () => {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,16 +93,18 @@ const ContentManagementPage = () => {
     title: '',
     subject: '',
     grade: '',
-    folder: 'lessons',
+    folder: '',
     description: ''
   });
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
+  const [bulkUploadCourseId, setBulkUploadCourseId] = useState('');
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [content, setContent] = useState<ContentItem[]>([]);
   const [folders, setFolders] = useState<FolderItem[]>([]);
-  const [storageInfo, setStorageInfo] = useState({ used: 0, total: 10 });
+  const [courses, setCourses] = useState<any[]>([]);
+  const [storageUsedGB, setStorageUsedGB] = useState(0);
 
   const currentUser = getCurrentUser();
   const userRole = currentUser?.role || 'teacher';
@@ -99,82 +123,87 @@ const ContentManagementPage = () => {
     }
 
     fetchContentData();
-  }, [router, currentUser?.role, selectedFolder]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router, currentUser?.role]);
 
   const fetchContentData = async () => {
     try {
       setIsLoading(true);
       setError('');
 
-      let contentResponse: any = null;
-      try {
-        contentResponse = await apiClient.getTeacherCoursesList();
-      } catch (e) {
-        console.error('Error fetching courses list:', e);
-        contentResponse = null;
-      }
+      const coursesResponse = await apiClient.getTeacherCourses();
+      const realCourses: any[] = Array.isArray(coursesResponse?.courses) ? coursesResponse.courses : [];
+      setCourses(realCourses);
 
-      let courses: any[] = [];
-      if (Array.isArray(contentResponse)) {
-        courses = contentResponse;
-      } else if (contentResponse?.courses && Array.isArray(contentResponse.courses)) {
-        courses = contentResponse.courses;
-      } else if (contentResponse?.data && Array.isArray(contentResponse.data)) {
-        courses = contentResponse.data;
-      }
+      // "Folders" map onto courses — course_content has no separate category
+      // column, and a course is the real grouping unit content already lives
+      // under (see GET /teachers/content?course_id=...).
+      const perCourse = await Promise.all(
+        realCourses.map((course: any) =>
+          apiClient
+            .getTeacherContent(course.id, { limit: 100 })
+            .then((r) => ({ course, items: r.content || [] }))
+            .catch(() => ({ course, items: [] as any[] }))
+        )
+      );
 
-      const transformedContent: ContentItem[] = courses.map((course: any) => ({
-        id: course?.id || Math.random().toString(),
-        title: course?.title || 'Untitled',
-        type: course?.type || 'document',
-        subject: course?.subject || 'General',
-        grade: course?.level || 'All Levels',
-        fileType: course?.file_type || 'PDF',
-        size: course?.file_size || '0 MB',
-        createdDate: course?.created_at ? new Date(course.created_at).toLocaleDateString() : 'N/A',
-        lastModified: course?.updated_at ? new Date(course.updated_at).toLocaleDateString() : 'N/A',
-        views: course?.views || 0,
-        shares: course?.shares || 0,
-        downloads: course?.downloads || 0,
-        isShared: course?.is_shared || false,
-        isFavorite: course?.is_favorite || false,
-        description: course?.description || ''
-      }));
+      const transformedContent: ContentItem[] = perCourse.flatMap(({ course, items }) =>
+        items.map((item: any) => ({
+          id: item.id,
+          courseId: course.id,
+          title: item.title || 'Untitled',
+          type: item.content_type || 'document',
+          subject: course.title || 'General',
+          grade: course.level || 'All Levels',
+          fileType: (item.content_type || 'file').toUpperCase(),
+          size: item.file_size || 'N/A',
+          createdDate: item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A',
+          lastModified: item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A',
+          views: 0,
+          shares: 0,
+          downloads: 0,
+          isShared: false,
+          isFavorite: false,
+          description: item.description || ''
+        }))
+      );
 
       setContent(transformedContent);
 
       setFolders([
         { id: 'all', name: 'All Content', count: transformedContent.length, icon: FolderOpen },
-        { id: 'lessons', name: 'Lesson Plans', count: Math.floor(transformedContent.length * 0.3), icon: Folder },
-        { id: 'presentations', name: 'Presentations', count: Math.floor(transformedContent.length * 0.2), icon: FileText },
-        { id: 'videos', name: 'Video Content', count: Math.floor(transformedContent.length * 0.15), icon: Video },
-        { id: 'assessments', name: 'Assessments', count: Math.floor(transformedContent.length * 0.2), icon: FileText },
-        { id: 'resources', name: 'Resources', count: Math.floor(transformedContent.length * 0.15), icon: Folder }
+        ...realCourses.map((course: any) => ({
+          id: course.id,
+          name: course.title || 'Untitled course',
+          count: transformedContent.filter((c) => c.courseId === course.id).length,
+          icon: Folder,
+        })),
       ]);
 
-      const totalSize = courses.reduce((acc: number, c: any) => {
-        const sizeStr = c?.file_size || '0';
-        const sizeMB = parseFloat(sizeStr) || 0;
-        return acc + sizeMB;
-      }, 0);
-      setStorageInfo({ used: totalSize / 1024, total: 10 });
+      const totalMB = perCourse
+        .flatMap(({ items }) => items)
+        .reduce((acc: number, item: any) => acc + parseSizeToMB(item.file_size), 0);
+      setStorageUsedGB(totalMB / 1024);
 
     } catch (err: any) {
       console.error('Content error:', err);
       setError(err?.message || 'Failed to load content');
       setContent([]);
-      setFolders([
-        { id: 'all', name: 'All Content', count: 0, icon: FolderOpen },
-        { id: 'lessons', name: 'Lesson Plans', count: 0, icon: Folder },
-        { id: 'presentations', name: 'Presentations', count: 0, icon: FileText },
-        { id: 'videos', name: 'Video Content', count: 0, icon: Video },
-        { id: 'assessments', name: 'Assessments', count: 0, icon: FileText },
-        { id: 'resources', name: 'Resources', count: 0, icon: Folder }
-      ]);
+      setCourses([]);
+      setFolders([{ id: 'all', name: 'All Content', count: 0, icon: FolderOpen }]);
     } finally {
       setIsLoading(false);
     }
   };
+
+  const visibleContent = React.useMemo(() => {
+    let list = selectedFolder === 'all' ? content : content.filter((c) => c.courseId === selectedFolder);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter((c) => c.title.toLowerCase().includes(q) || c.description.toLowerCase().includes(q));
+    }
+    return list;
+  }, [content, selectedFolder, searchQuery]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -197,14 +226,43 @@ const ContentManagementPage = () => {
   const [bulkUploadLoading, setBulkUploadLoading] = useState(false);
   const [createFolderLoading, setCreateFolderLoading] = useState(false);
 
+  const uploadOneFile = async (file: File, courseId: string, title: string, description: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('course_id', courseId);
+    formData.append('title', title);
+    formData.append('description', description || '');
+    formData.append('content_type', inferContentType(file));
+    formData.append('access_level', 'free');
+    formData.append('is_downloadable', 'true');
+
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/teachers/content/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `Upload failed for "${file.name}"`);
+    }
+    return response.json();
+  };
+
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedFile) {
       alert('Please select a file to upload');
       return;
     }
-    
+
+    if (!fileData.folder) {
+      alert('Please choose a course to upload into');
+      return;
+    }
+
     if (!fileData.title.trim()) {
       alert('Please enter a title for the file');
       return;
@@ -212,21 +270,19 @@ const ContentManagementPage = () => {
 
     try {
       setUploadLoading(true);
-      
-      console.log('Uploading file:', selectedFile, fileData);
-      
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      alert(`File "${fileData.title}" uploaded successfully!`);
+
+      await uploadOneFile(selectedFile, fileData.folder, fileData.title, fileData.description);
+
       setIsUploadModalOpen(false);
       setSelectedFile(null);
       setFileData({
         title: '',
         subject: '',
         grade: '',
-        folder: 'lessons',
+        folder: '',
         description: ''
       });
+      await fetchContentData();
     } catch (err: any) {
       console.error('Error uploading file:', err);
       alert(`Failed to upload file: ${err.message || 'Unknown error'}`);
@@ -237,22 +293,35 @@ const ContentManagementPage = () => {
 
   const handleBulkUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (bulkFiles.length === 0) {
       alert('Please select files to upload');
       return;
     }
 
+    if (!bulkUploadCourseId) {
+      alert('Please choose a course to upload into');
+      return;
+    }
+
     try {
       setBulkUploadLoading(true);
-      
-      console.log('Bulk uploading files:', bulkFiles);
-      
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      alert(`${bulkFiles.length} files uploaded successfully!`);
+
+      const results = await Promise.allSettled(
+        bulkFiles.map((file) =>
+          uploadOneFile(file, bulkUploadCourseId, file.name.replace(/\.[^/.]+$/, ''), '')
+        )
+      );
+      const failed = results.filter((r) => r.status === 'rejected').length;
+
       setIsBulkUploadModalOpen(false);
       setBulkFiles([]);
+      setBulkUploadCourseId('');
+      await fetchContentData();
+
+      if (failed > 0) {
+        alert(`${bulkFiles.length - failed} of ${bulkFiles.length} files uploaded. ${failed} failed.`);
+      }
     } catch (err: any) {
       console.error('Error bulk uploading files:', err);
       alert(`Failed to upload files: ${err.message || 'Unknown error'}`);
@@ -263,7 +332,7 @@ const ContentManagementPage = () => {
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!newFolderName.trim()) {
       alert('Please enter a folder name');
       return;
@@ -271,14 +340,30 @@ const ContentManagementPage = () => {
 
     try {
       setCreateFolderLoading(true);
-      
-      console.log('Creating folder:', newFolderName);
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      alert(`Folder "${newFolderName}" created successfully!`);
+
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/teachers/courses`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newFolderName,
+          description: '',
+          level: 'beginner',
+          status: 'draft',
+          price: 0,
+          is_featured: false,
+          max_students: 100,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to create folder');
+      }
+
       setIsCreateFolderModalOpen(false);
       setNewFolderName('');
+      await fetchContentData();
     } catch (err: any) {
       console.error('Error creating folder:', err);
       alert(`Failed to create folder: ${err.message || 'Unknown error'}`);
@@ -498,7 +583,7 @@ const ContentManagementPage = () => {
                 </div>
 
                 {}
-                {content.length === 0 ? (
+                {visibleContent.length === 0 ? (
                   <div className="bg-cream-50 p-12 rounded-lg shadow-sm text-center">
                     <FileText className="w-16 h-16 text-espresso/30 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-espresso mb-2">No content yet</h3>
@@ -513,7 +598,7 @@ const ContentManagementPage = () => {
                   </div>
                 ) : viewMode === 'grid' ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {content.map((item, index) => {
+                    {visibleContent.map((item, index) => {
                       const FileIcon = getFileIcon(item.type);
                       return (
                         <motion.div
@@ -610,7 +695,7 @@ const ContentManagementPage = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-cream-50 divide-y divide-espresso/15">
-                        {content.map((item, index) => {
+                        {visibleContent.map((item, index) => {
                           const FileIcon = getFileIcon(item.type);
                           return (
                             <motion.tr
@@ -684,21 +769,13 @@ const ContentManagementPage = () => {
 
                 {}
                 <div className="bg-cream-50 p-6 rounded-2xl border-2 border-espresso/10 shadow-kid mt-6">
-                  <h3 className="text-lg font-semibold text-espresso mb-4">Storage Usage</h3>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-espresso/70">
-                      Used: {storageInfo.used.toFixed(1)} GB of {storageInfo.total} GB
-                    </span>
-                    <span className="text-sm text-espresso/70">
-                      {((storageInfo.used / storageInfo.total) * 100).toFixed(0)}% used
-                    </span>
-                  </div>
-                  <div className="w-full bg-cream-300 rounded-full h-2">
-                    <div
-                      className="bg-teacher-600 h-2 rounded-full"
-                      style={{ width: `${(storageInfo.used / storageInfo.total) * 100}%` }}
-                    ></div>
-                  </div>
+                  <h3 className="text-lg font-semibold text-espresso mb-4">Storage</h3>
+                  <span className="text-sm text-espresso/70">
+                    {storageUsedGB >= 1
+                      ? `${storageUsedGB.toFixed(1)} GB`
+                      : `${(storageUsedGB * 1024).toFixed(0)} MB`}{' '}
+                    used across {content.length} file{content.length === 1 ? '' : 's'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -770,7 +847,7 @@ const ContentManagementPage = () => {
                   
                   <div>
                     <label className="block text-sm font-medium text-espresso mb-1">
-                      Folder
+                      Course
                     </label>
                     <select
                       name="folder"
@@ -779,12 +856,16 @@ const ContentManagementPage = () => {
                       className="w-full p-3 border border-espresso/20 rounded-lg"
                       required
                     >
-                      {folders.map(folder => (
-                        <option key={folder.id} value={folder.id}>{folder.name}</option>
+                      <option value="" disabled>Select a course</option>
+                      {courses.map(course => (
+                        <option key={course.id} value={course.id}>{course.title}</option>
                       ))}
                     </select>
+                    {courses.length === 0 && (
+                      <p className="text-xs text-espresso/55 mt-1">Create a course first from "Create Folder" below.</p>
+                    )}
                   </div>
-                  
+
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-espresso mb-1">
                       Description
@@ -926,11 +1007,27 @@ const ContentManagementPage = () => {
               
               <form onSubmit={handleBulkUploadSubmit}>
                 <div className="mb-6">
+                  <label className="block text-sm font-medium text-espresso mb-1">
+                    Course
+                  </label>
+                  <select
+                    value={bulkUploadCourseId}
+                    onChange={(e) => setBulkUploadCourseId(e.target.value)}
+                    className="w-full p-3 border border-espresso/20 rounded-lg"
+                    required
+                  >
+                    <option value="" disabled>Select a course</option>
+                    {courses.map(course => (
+                      <option key={course.id} value={course.id}>{course.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mb-6">
                   <div className="border-2 border-dashed border-espresso/20 rounded-lg p-8 text-center">
                     <Upload className="w-12 h-12 text-espresso/45 mx-auto mb-3" />
                     <p className="text-espresso/70 mb-4">Drag & drop files here or click to browse</p>
-                    <input 
-                      type="file" 
+                    <input
+                      type="file"
                       multiple 
                       onChange={handleBulkUpload}
                       className="hidden" 

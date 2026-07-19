@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Eye,
@@ -18,9 +19,11 @@ import {
   Users,
   Save,
   CheckCircle,
+  Loader2,
 } from 'lucide-react';
 import AuthenticatedNavigation from '@/components/ui/authenticated-navigation';
 import DashboardSidebar from '@/components/ui/dashboard-sidebar';
+import { isAuthenticated } from '@/lib/api';
 import { DisabilityType, getDisabilityLabel, getDisabilityDescription } from '@/lib/disability-assessment';
 
 interface TeacherSpecialization {
@@ -68,18 +71,69 @@ const levelColors: Record<string, string> = {
   expert: 'bg-mustard/20 text-mustard-500',
 };
 
+const defaultSpecializations = (): TeacherSpecialization[] =>
+  allDisabilities.map((type) => ({
+    disabilityType: type,
+    level: 'none',
+    certified: false,
+    yearsExperience: 0,
+    comfortLevel: 3,
+  }));
+
 export default function TeacherSpecializationsPage() {
-  const [specializations, setSpecializations] = useState<TeacherSpecialization[]>(
-    allDisabilities.map((type) => ({
-      disabilityType: type,
-      level: 'none',
-      certified: false,
-      yearsExperience: 0,
-      comfortLevel: 3,
-    }))
-  );
+  const router = useRouter();
+  const [specializations, setSpecializations] = useState<TeacherSpecialization[]>(defaultSpecializations());
+  // The rest of the teacher_specializations row (specializations list,
+  // certifications, etc. — managed by /teachers/accessibility-specialization).
+  // The backend POST overwrites every column, so this must be preserved and
+  // sent back unchanged or a save here would wipe out that page's data.
+  const [restOfRecord, setRestOfRecord] = useState<Record<string, any>>({});
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.push('/auth');
+      return;
+    }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : '';
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/accessibility/teacher-specialization`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`Failed (${res.status})`);
+      const data = await res.json();
+      const spec = data?.specialization || {};
+      const { accommodation_strategies, ...rest } = spec;
+      setRestOfRecord(rest);
+
+      if (accommodation_strategies && typeof accommodation_strategies === 'object') {
+        setSpecializations(
+          allDisabilities.map((type) => ({
+            disabilityType: type,
+            level: 'none',
+            certified: false,
+            yearsExperience: 0,
+            comfortLevel: 3,
+            ...(accommodation_strategies[type] || {}),
+          }))
+        );
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Could not load your saved specializations.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const updateSpecialization = (
     type: DisabilityType,
@@ -93,12 +147,47 @@ export default function TeacherSpecializationsPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setSaving(false);
-    setSaved(true);
+    setError(null);
+    try {
+      const accommodation_strategies: Record<string, any> = {};
+      specializations
+        .filter((s) => s.level !== 'none')
+        .forEach((s) => {
+          const { disabilityType, ...rest } = s;
+          accommodation_strategies[disabilityType] = rest;
+        });
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : '';
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/accessibility/teacher-specialization`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ...restOfRecord, accommodation_strategies }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Failed to save (${res.status})`);
+      }
+      setSaved(true);
+    } catch (err: any) {
+      setError(err?.message || 'Could not save your specializations. Try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const activeSpecializations = specializations.filter((s) => s.level !== 'none');
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-cream-100">
+        <AuthenticatedNavigation userRole="teacher" userName="Teacher" userEmail="teacher@example.com" />
+        <DashboardSidebar userRole="teacher" />
+        <div className="pt-20 pb-8 flex justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-espresso/45" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cream-100">
@@ -120,6 +209,7 @@ export default function TeacherSpecializationsPage() {
             Indicate your expertise in teaching students with different accessibility needs.
             This helps match you with students who can benefit from your experience.
           </p>
+          {error && <p className="text-sm text-coral mt-2">{error}</p>}
         </div>
 
         {}

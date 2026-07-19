@@ -35,6 +35,7 @@ import {
 
 interface ContentItem {
   id: string;
+  course_id: string;
   title: string;
   description: string;
   content_type: string;
@@ -92,6 +93,8 @@ const StudentContentLibraryPage = () => {
   const [user, setUser] = useState<UserData | null>(null);
   
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [wishlistedCourseIds, setWishlistedCourseIds] = useState<Set<string>>(new Set());
+  const [wishlistBusyId, setWishlistBusyId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
   const [accessLevels, setAccessLevels] = useState<Category[]>([]);
@@ -147,8 +150,41 @@ const StudentContentLibraryPage = () => {
     if (user) {
       loadContentData();
       loadCategoriesData();
+      loadWishlist();
     }
   }, [user]);
+
+  const loadWishlist = async () => {
+    try {
+      const res = await apiClient.getStudentWishlist();
+      setWishlistedCourseIds(new Set((res?.data || []).map((w) => w.course_id)));
+    } catch (error) {
+      console.error('Failed to load wishlist:', error);
+    }
+  };
+
+  const toggleWishlist = async (courseId: string) => {
+    if (!courseId || wishlistBusyId) return;
+    setWishlistBusyId(courseId);
+    const alreadyWishlisted = wishlistedCourseIds.has(courseId);
+    try {
+      if (alreadyWishlisted) {
+        await apiClient.removeFromWishlist(courseId);
+        setWishlistedCourseIds((prev) => {
+          const next = new Set(prev);
+          next.delete(courseId);
+          return next;
+        });
+      } else {
+        await apiClient.addToWishlist(courseId);
+        setWishlistedCourseIds((prev) => new Set(prev).add(courseId));
+      }
+    } catch (error) {
+      console.error('Failed to update wishlist:', error);
+    } finally {
+      setWishlistBusyId(null);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -700,10 +736,16 @@ const StudentContentLibraryPage = () => {
                       <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
-                        className="clay-card p-2 text-espresso/70 hover:text-coral transition-colors"
-                        title="Add to favorites"
+                        onClick={() => toggleWishlist(item.course_id)}
+                        disabled={!item.course_id || wishlistBusyId === item.course_id}
+                        className={`clay-card p-2 transition-colors disabled:opacity-50 ${
+                          wishlistedCourseIds.has(item.course_id)
+                            ? 'text-coral'
+                            : 'text-espresso/70 hover:text-coral'
+                        }`}
+                        title={wishlistedCourseIds.has(item.course_id) ? 'Remove from wishlist' : 'Add to wishlist'}
                       >
-                        <Heart className="w-4 h-4" />
+                        <Heart className={`w-4 h-4 ${wishlistedCourseIds.has(item.course_id) ? 'fill-current' : ''}`} />
                       </motion.button>
                       
                       <motion.button

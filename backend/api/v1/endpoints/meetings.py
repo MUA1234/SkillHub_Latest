@@ -136,7 +136,7 @@ async def list_meeting_rooms(
 
         joined: List[dict] = []
         try:
-            part_url = f"{settings.supabase_url}/rest/v1/live_meeting_participants"
+            part_url = f"{settings.supabase_url}/rest/v1/meeting_participants"
             part_resp = requests.get(
                 part_url,
                 params={"user_id": f"eq.{str(current_user.id)}", "select": "meeting_id"},
@@ -450,7 +450,7 @@ async def get_meeting_participants(
 @router.post("/rooms/{room_id}/join")
 async def join_meeting_room(
     room_id: str,
-    role: str = Body("participant"),
+    role: str = Body("participant", embed=True),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -677,7 +677,7 @@ async def send_signaling_message(
             "expires_at": (datetime.utcnow() + timedelta(minutes=5)).isoformat()
         }
         
-        url = f"{settings.supabase_url}/rest/v1/webrtc_signaling"
+        url = f"{settings.supabase_url}/rest/v1/webrtc_signaling_messages"
         response = requests.post(url, json=signal_data, headers=headers, timeout=10)
         
         if response.status_code in [200, 201]:
@@ -723,7 +723,7 @@ async def get_signaling_messages(
         if since:
             params["created_at"] = f"gt.{since}"
         
-        url = f"{settings.supabase_url}/rest/v1/webrtc_signaling"
+        url = f"{settings.supabase_url}/rest/v1/webrtc_signaling_messages"
         response = requests.get(url, params=params, headers=headers, timeout=10)
         
         if response.status_code == 200:

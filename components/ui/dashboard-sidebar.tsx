@@ -33,6 +33,7 @@ import {
   UsersRound,
   Download,
   Sparkles,
+  Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,7 @@ const links: Record<Role, SidebarLink[]> = {
     { label: "Recordings", href: "/students/recordings", icon: PlayCircle },
     { label: "Pre-recorded Lessons", href: "/students/pre-recorded-lessons", icon: PlayCircle },
     { label: "Content Library", href: "/students/content-library", icon: Library },
+    { label: "Wishlist", href: "/students/wishlist", icon: Bookmark },
     { label: "Downloads", href: "/students/downloads", icon: Download },
     { label: "Exams", href: "/students/exams", icon: FileQuestion },
     { label: "Certificates", href: "/students/certificates", icon: Trophy },

@@ -69,6 +69,22 @@ defmodule SkillHubWeb.AccessibilityController do
     json(conn, %{success: true, guardian_links: links})
   end
 
+  # PATCH /accessibility/guardian-links/:id — student-only revoke (soft
+  # delete via is_active, matching how guardian_links/2 already filters
+  # reads). Scoped to student_id so a link can't be toggled by anyone but
+  # the student who owns it.
+  def update_guardian_link(conn, %{"id" => id} = params) do
+    is_active = if params["is_active"] == false, do: false, else: true
+
+    case SQL.one(
+           "update public.guardian_links set is_active = $3 where id = $1::uuid and student_id = $2::uuid returning id",
+           [id, uid(conn), is_active]
+         ) do
+      nil -> conn |> put_status(404) |> json(%{detail: "Guardian link not found"})
+      _ -> json(conn, %{success: true})
+    end
+  end
+
   def onboarding_status(conn, _params) do
     row = SQL.one("select onboarding_completed from public.student_disability_profiles where user_id = $1::uuid limit 1", [uid(conn)])
     json(conn, %{success: true, onboarding_completed: (row && row.onboarding_completed) || false, has_profile: not is_nil(row)})

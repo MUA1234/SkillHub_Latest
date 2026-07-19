@@ -53,6 +53,7 @@ defmodule SkillHub.MixProject do
       {:cors_plug, "~> 3.0"},
       {:swoosh, "~> 1.16"},
       {:gen_smtp, "~> 1.2"},
+      {:elixlsx, "~> 0.6.0"},
       bcrypt_dep()
     ]
   end

@@ -7,10 +7,11 @@ teacher specializations, and related accessibility features.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, text
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
+import json
 import uuid
 
 from database.database import get_db
@@ -269,17 +270,20 @@ async def create_disability_profile(
     """Create or update a disability profile for the current user."""
     try:
         result = await db.execute(
-            """
+            text("""
             SELECT id FROM student_disability_profiles
             WHERE user_id = :user_id
-            """,
+            """),
             {"user_id": current_user.id}
         )
         existing = result.fetchone()
 
+        profile_dict = profile_data.dict()
+        profile_dict["severity_levels"] = json.dumps(profile_dict.get("severity_levels") or {})
+
         if existing:
             await db.execute(
-                """
+                text("""
                 UPDATE student_disability_profiles
                 SET has_disability = :has_disability,
                     disability_types = :disability_types,
@@ -298,15 +302,15 @@ async def create_disability_profile(
                     onboarding_completed = TRUE,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = :user_id
-                """,
+                """),
                 {
                     "user_id": current_user.id,
-                    **profile_data.dict()
+                    **profile_dict
                 }
             )
         else:
             await db.execute(
-                """
+                text("""
                 INSERT INTO student_disability_profiles (
                     user_id, has_disability, disability_types, primary_disability,
                     severity_levels, professionally_diagnosed, iep_status,
@@ -320,10 +324,10 @@ async def create_disability_profile(
                     :guardian_phone, :guardian_relationship, :additional_needs,
                     :share_with_teachers, :share_with_sponsors, TRUE
                 )
-                """,
+                """),
                 {
                     "user_id": current_user.id,
-                    **profile_data.dict()
+                    **profile_dict
                 }
             )
 
@@ -621,7 +625,7 @@ async def get_teacher_specialization(
     db: AsyncSession = Depends(get_db)
 ):
     """Get the current teacher's specialization profile."""
-    if current_user.get("role") != "teacher":
+    if current_user.role != "teacher":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only teachers can access this endpoint"
@@ -629,10 +633,10 @@ async def get_teacher_specialization(
 
     try:
         result = await db.execute(
-            """
+            text("""
             SELECT id FROM teacher_profiles
             WHERE user_id = :user_id
-            """,
+            """),
             {"user_id": current_user.id}
         )
         teacher = result.fetchone()
@@ -644,10 +648,10 @@ async def get_teacher_specialization(
             )
 
         result = await db.execute(
-            """
+            text("""
             SELECT * FROM teacher_specializations
             WHERE teacher_id = :teacher_id
-            """,
+            """),
             {"teacher_id": teacher.id}
         )
         specialization = result.fetchone()
@@ -672,7 +676,7 @@ async def save_teacher_specialization(
     db: AsyncSession = Depends(get_db)
 ):
     """Create or update teacher specialization profile."""
-    if current_user.get("role") != "teacher":
+    if current_user.role != "teacher":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only teachers can access this endpoint"
@@ -680,10 +684,10 @@ async def save_teacher_specialization(
 
     try:
         result = await db.execute(
-            """
+            text("""
             SELECT id FROM teacher_profiles
             WHERE user_id = :user_id
-            """,
+            """),
             {"user_id": current_user.id}
         )
         teacher = result.fetchone()
@@ -695,35 +699,39 @@ async def save_teacher_specialization(
             )
 
         result = await db.execute(
-            """
+            text("""
             SELECT id FROM teacher_specializations
             WHERE teacher_id = :teacher_id
-            """,
+            """),
             {"teacher_id": teacher.id}
         )
         existing = result.fetchone()
 
         spec_dict = spec_data.dict()
+        json_cols = {"certifications", "training_completed", "accommodation_strategies"}
+        bind_params = {
+            k: (json.dumps(v) if k in json_cols else v) for k, v in spec_dict.items()
+        }
 
         if existing:
             set_clauses = ", ".join([f"{k} = :{k}" for k in spec_dict.keys()])
             await db.execute(
-                f"""
+                text(f"""
                 UPDATE teacher_specializations
                 SET {set_clauses}, updated_at = CURRENT_TIMESTAMP
                 WHERE teacher_id = :teacher_id
-                """,
-                {"teacher_id": teacher.id, **spec_dict}
+                """),
+                {"teacher_id": teacher.id, **bind_params}
             )
         else:
             columns = ", ".join(["teacher_id"] + list(spec_dict.keys()))
             values = ", ".join([":teacher_id"] + [f":{k}" for k in spec_dict.keys()])
             await db.execute(
-                f"""
+                text(f"""
                 INSERT INTO teacher_specializations ({columns})
                 VALUES ({values})
-                """,
-                {"teacher_id": teacher.id, **spec_dict}
+                """),
+                {"teacher_id": teacher.id, **bind_params}
             )
 
         await db.commit()
@@ -901,7 +909,7 @@ async def create_guardian_link(
         ) or {}
         student_name = (
             f"{profile.get('first_name', '')} {profile.get('last_name', '')}".strip()
-            or current_user.get("email")
+            or current_user.email
             or "your student"
         )
 

@@ -105,6 +105,7 @@ defmodule SkillHubWeb.StudentController do
       max_rate = numf(params["max_rate"])
       online_only = params["online_only"] in [true, "true", "1"]
       filter_by_mine = params["filter_by_my_disability"] not in [false, "false", "0"]
+      teacher_id = params["teacher_id"] || ""
 
       my_types =
         if filter_by_mine do
@@ -129,7 +130,7 @@ defmodule SkillHubWeb.StudentController do
           []
         )
         |> Enum.map(&teacher_view(&1, my_types))
-        |> Enum.filter(&teacher_matches?(&1, search, subject, disability, min_rating, max_rate, online_only, filter_by_mine, my_types))
+        |> Enum.filter(&teacher_matches?(&1, search, subject, disability, min_rating, max_rate, online_only, filter_by_mine, my_types, teacher_id))
         |> Enum.sort_by(&{&1.specialization_match_score || 0, &1.average_rating || 0}, :desc)
 
       total = length(rows)
@@ -163,8 +164,9 @@ defmodule SkillHubWeb.StudentController do
     }
   end
 
-  defp teacher_matches?(t, search, subject, disability, min_rating, max_rate, online_only, filter_by_mine, my_types) do
+  defp teacher_matches?(t, search, subject, disability, min_rating, max_rate, online_only, filter_by_mine, my_types, teacher_id) do
     cond do
+      teacher_id != "" and t.id != teacher_id -> false
       min_rating > 0 and (t.average_rating || 0) < min_rating -> false
       max_rate > 0 and (t.hourly_rate || 0) > max_rate -> false
       online_only and not t.is_available -> false
@@ -184,6 +186,64 @@ defmodule SkillHubWeb.StudentController do
     :error -> 0.0
   end)
   defp numf(_), do: 0.0
+
+  defp blank(nil), do: nil
+  defp blank(""), do: nil
+  defp blank(v), do: v
+
+  # POST /students/reviews — one review per (student, teacher); resubmitting
+  # updates the existing row rather than creating a duplicate. teacher_profiles
+  # .average_rating/.total_reviews recompute automatically via the
+  # reviews_recompute_teacher_rating trigger (see migration 20260719000002).
+  def create_review(conn, params) do
+    with {:ok, _} <- require_role(conn, "student") do
+      student_id = uid(conn)
+      teacher_id = blank(params["teacher_id"])
+      rating = int(params["rating"], 0)
+      course_id = blank(params["course_id"])
+      title = blank(params["title"])
+      content = blank(params["content"])
+
+      cond do
+        is_nil(teacher_id) ->
+          conn |> put_status(400) |> json(%{detail: "teacher_id is required"})
+
+        rating < 1 or rating > 5 ->
+          conn |> put_status(400) |> json(%{detail: "rating must be between 1 and 5"})
+
+        is_nil(SQL.one("select id from public.teacher_profiles where id = $1::uuid", [teacher_id])) ->
+          conn |> put_status(404) |> json(%{detail: "Teacher not found"})
+
+        is_nil(
+          SQL.one(
+            "select ce.id from public.course_enrollments ce join public.courses c on c.id = ce.course_id where ce.student_id = $1::uuid and c.teacher_id = $2::uuid limit 1",
+            [student_id, teacher_id]
+          )
+        ) ->
+          conn |> put_status(403) |> json(%{detail: "You can only review teachers whose courses you're enrolled in"})
+
+        true ->
+          existing = SQL.one("select id::text from public.reviews where reviewer_id = $1::uuid and teacher_id = $2::uuid", [student_id, teacher_id])
+
+          review =
+            case existing do
+              %{id: rid} ->
+                SQL.json_one(
+                  "update public.reviews set rating = $3, title = $4, content = $5, course_id = coalesce($6::uuid, course_id) where id = $1::uuid and reviewer_id = $2::uuid returning to_jsonb(reviews) as row",
+                  [rid, student_id, rating, title, content, course_id]
+                )
+
+              nil ->
+                SQL.json_one(
+                  "insert into public.reviews (reviewer_id, teacher_id, course_id, rating, title, content) values ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6) returning to_jsonb(reviews) as row",
+                  [student_id, teacher_id, course_id, rating, title, content]
+                )
+            end
+
+          json(conn, %{success: true, review: review})
+      end
+    end
+  end
 
   def enrolled_courses(conn, _params) do
     with {:ok, _} <- require_role(conn, "student") do
@@ -209,20 +269,69 @@ defmodule SkillHubWeb.StudentController do
       limit = int(params["limit"], 20) |> max(1) |> min(100)
       offset = (page - 1) * limit
 
+      # app/students/payment-history/page.tsx reads transactionId/type/
+      # description/teacherName/date/status directly off each row (no
+      # snake->camel mapping layer) and expects status/type values from a
+      # school-tuition vocabulary the schema doesn't have (payments.status
+      # is really pending/completed/failed/refunded, payment_type is really
+      # course_enrollment/event_registration/session_booking) — mapped here
+      # rather than rewriting every frontend usage site.
       payments =
         SQL.maps(
           """
-          select p.id::text id, coalesce(p.amount, 0)::float amount, coalesce(p.currency, 'LKR') currency,
-            p.status, p.payment_method, p.payment_method "paymentMethod",
-            null course_title, null payment_gateway, null "paymentGateway", null receipt_url, p.created_at
+          select p.id::text id, p.transaction_id "transactionId", coalesce(p.amount, 0)::float amount, coalesce(p.currency, 'LKR') currency,
+            case p.payment_type::text
+              when 'course_enrollment' then 'tuition'
+              when 'session_booking' then 'tuition'
+              when 'event_registration' then 'extracurricular'
+              else p.payment_type::text
+            end "type",
+            coalesce(c.title, e.title, s.title, 'Payment') description,
+            nullif(trim(coalesce(tup.first_name,'') || ' ' || coalesce(tup.last_name,'')), '') "teacherName",
+            case p.status::text
+              when 'completed' then 'paid'
+              when 'failed' then 'overdue'
+              else p.status::text
+            end status,
+            p.payment_method, p.payment_method "paymentMethod", p.payment_gateway "paymentGateway",
+            p.created_at, p.created_at "date"
           from public.payments p
+          left join public.courses c on p.payment_type = 'course_enrollment' and p.reference_id = c.id
+          left join public.events e on p.payment_type = 'event_registration' and p.reference_id = e.id
+          left join public.live_sessions s on p.payment_type = 'session_booking' and p.reference_id = s.id
+          left join public.teacher_profiles tp on tp.id = coalesce(c.teacher_id, s.teacher_id)
+          left join public.user_profiles tup on tup.user_id = tp.user_id
           where p.user_id = $1::uuid order by p.created_at desc limit #{limit} offset #{offset}
           """,
           [user_id]
         )
 
       total = SQL.scalar("select count(*)::int from public.payments where user_id = $1::uuid", [user_id], 0)
-      json(conn, %{success: true, data: %{payments: payments, pagination: %{total: total, page: page, limit: limit, total_pages: div(total + limit - 1, limit)}}})
+
+      summary =
+        SQL.one(
+          """
+          select
+            coalesce(sum(amount) filter (where status = 'completed'), 0)::float total_paid,
+            coalesce(sum(amount) filter (where status = 'pending'), 0)::float total_pending,
+            coalesce(sum(amount) filter (where status = 'failed'), 0)::float total_overdue,
+            count(*)::int total_payments
+          from public.payments where user_id = $1::uuid
+          """,
+          [user_id]
+        )
+
+      json(conn, %{
+        success: true,
+        data: %{
+          payments: payments,
+          pagination: %{total: total, page: page, limit: limit, total_pages: div(total + limit - 1, limit)},
+          summary: %{
+            totalPaid: summary.total_paid, totalPending: summary.total_pending,
+            totalOverdue: summary.total_overdue, totalPayments: summary.total_payments
+          }
+        }
+      })
     end
   end
 
@@ -609,6 +718,7 @@ defmodule SkillHubWeb.StudentController do
             SQL.maps(
               """
               select m.id::text id, m.sender_id::text sender_id, m.content, coalesce(m.is_read, false) is_read, m.created_at,
+                m.attachments,
                 nullif(trim(coalesce(up.first_name,'') || ' ' || coalesce(up.last_name,'')), '') sender_name
               from public.messages m left join public.user_profiles up on up.user_id = m.sender_id
               where m.conversation_id = $1::uuid order by m.created_at desc limit #{limit} offset #{offset}
@@ -619,7 +729,7 @@ defmodule SkillHubWeb.StudentController do
               %{
                 id: m.id, conversation_id: cid, sender_id: m.sender_id, sender_name: m.sender_name || "Unknown",
                 sender_role: (if m.sender_id == user_id, do: "student", else: "teacher"), content: m.content,
-                attachments: [], is_read: m.is_read, created_at: m.created_at, is_from_me: m.sender_id == user_id, timestamp: ""
+                attachments: m.attachments || [], is_read: m.is_read, created_at: m.created_at, is_from_me: m.sender_id == user_id, timestamp: m.created_at
               }
             end)
             |> Enum.reverse()
@@ -695,7 +805,8 @@ defmodule SkillHubWeb.StudentController do
           select to_jsonb(cc) content, to_jsonb(c) course, s.name subject_name, s.category subject_category,
             nullif(trim(coalesce(up.first_name,'') || ' ' || coalesce(up.last_name,'')), '') teacher_name,
             up.avatar_url teacher_avatar, tp.average_rating teacher_rating,
-            exists(select 1 from public.course_enrollments e where e.course_id = cc.course_id and e.student_id = $1::uuid and e.status = 'active') has_access
+            exists(select 1 from public.course_enrollments e where e.course_id = cc.course_id and e.student_id = $1::uuid and e.status = 'active') has_access,
+            (select count(*)::int from public.course_enrollments e2 where e2.course_id = cc.course_id) total_enrollments
           from public.course_content cc
           join public.courses c on c.id = cc.course_id and c.status = 'published'
           left join public.subjects s on s.id = c.subject_id
@@ -735,7 +846,7 @@ defmodule SkillHubWeb.StudentController do
       teacher_id: course["teacher_id"], teacher_name: r.teacher_name || "Unknown Teacher",
       teacher_avatar: r.teacher_avatar, teacher_rating: numf(r.teacher_rating),
       subject_name: r.subject_name, subject_category: r.subject_category, has_access: r.has_access,
-      progress_percentage: 0, time_spent_minutes: 0, is_completed: false, last_accessed_at: nil, total_enrollments: 0,
+      progress_percentage: 0, time_spent_minutes: 0, is_completed: false, last_accessed_at: nil, total_enrollments: r.total_enrollments,
       thumbnail_url: "https://ui-avatars.com/api/?name=#{URI.encode(title)}&background=3b82f6&color=ffffff&size=400x300",
       accessibility: %{
         has_captions: present?(item["caption_url"]), has_transcript: present?(item["transcript_url"]),

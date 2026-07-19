@@ -62,38 +62,44 @@ export default function SponsorDashboard() {
       setError('');
       const [dashboardResponse, campaignsResponse, eventsResponse, impactResponse] = await Promise.all([
         apiClient.getSponsorDashboard().catch(() => null),
-        apiClient.getSponsorCampaigns({}).catch(() => ({ campaigns: [] })),
-        apiClient.getSponsorEvents({}).catch(() => ({ events: [] })),
+        apiClient.getSponsorCampaigns({ limit: 50 }).catch(() => null),
+        apiClient.getSponsorEvents({ limit: 50 }).catch(() => null),
         apiClient.getSponsorRecentImpact(30).catch(() => null),
       ]);
 
-      const stats = dashboardResponse?.stats || {};
-      const campaigns = campaignsResponse?.campaigns || [];
-      const events = eventsResponse?.events || [];
-      const impactActivities = Array.isArray(impactResponse?.activities)
-        ? impactResponse.activities
-        : Array.isArray(impactResponse)
-          ? impactResponse
-          : [];
+      // These endpoints wrap their payload under `.data` — see
+      // GET /sponsors/campaigns etc. in sponsor_controller.ex.
+      const stats = dashboardResponse?.data?.stats || {};
+      const campaigns = campaignsResponse?.data?.campaigns || [];
+      const events = eventsResponse?.data?.events || [];
+      const impactActivities = impactResponse?.data?.activities || [];
+
+      // campaign_view/2 formats budget as a display string ("LKR 1,234"),
+      // matching the same shape /sponsors/campaigns/page.tsx already parses.
+      const parseBudget = (v: any) =>
+        typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(/[^\d.]/g, '')) || 0;
 
       setDashboardData({
         stats: {
-          activeCampaigns: stats.active_campaigns || campaigns.filter((c: any) => c.status === 'active').length || 0,
+          activeCampaigns: stats.active_campaigns ?? campaigns.filter((c: any) => c.status === 'active').length ?? 0,
           totalBudget: stats.total_budget || 0,
           studentsReached: stats.students_reached || 0,
           eventsHosted: stats.events_hosted || events.length || 0,
           teacherPartnerships: stats.teacher_partnerships || 0,
           roi: stats.roi || 0,
         },
-        recentCampaigns: campaigns.slice(0, 3).map((c: any) => ({
-          id: c.id, title: c.title || 'Campaign', status: c.status || 'active',
-          budget: c.budget || 0, spent: c.spent || 0, reach: c.reach || 0,
-          startDate: c.start_date || c.created_at, endDate: c.end_date || '',
-        })),
+        recentCampaigns: campaigns.slice(0, 3).map((c: any) => {
+          const budget = parseBudget(c.budget);
+          return {
+            id: c.id, title: c.title || 'Campaign', status: c.status || 'active',
+            budget, spent: budget * ((c.completion || 0) / 100), reach: c.studentsReached || 0,
+            startDate: c.startDate || c.createdAt, endDate: c.endDate || '',
+          };
+        }),
         upcomingEvents: events.slice(0, 3).map((e: any) => ({
           id: e.id, title: e.title || 'Event',
-          date: e.start_date || e.created_at,
-          attendees: e.attendees || e.registered_count || 0,
+          date: e.startDate,
+          attendees: e.currentAttendees || 0,
           location: e.location || 'Online',
         })),
         recentActivity: impactActivities.slice(0, 10).map((a: any) => ({

@@ -78,6 +78,10 @@ interface AnalyticsData {
   impactMetrics: ImpactMetric[];
 }
 
+// The backend sends icon names as strings (JSON can't carry a component
+// reference) — map them to the actual imported lucide icons here.
+const ICON_MAP: Record<string, any> = { TrendingUp, Users, Target, Activity };
+
 const SponsorAnalyticsPage = () => {
   const router = useRouter();
   const { language } = useTranslation();
@@ -165,114 +169,6 @@ const SponsorAnalyticsPage = () => {
     }
   };
 
-  const mockOverviewMetrics = [
-    {
-      label: 'Total ROI',
-      value: '285%',
-      change: '+12%',
-      trend: 'up',
-      icon: TrendingUp,
-      color: 'text-forest',
-      bgColor: 'bg-forest/10'
-    },
-    {
-      label: 'Students Reached',
-      value: '12,847',
-      change: '+24%',
-      trend: 'up',
-      icon: Users,
-      color: 'text-terracotta',
-      bgColor: 'bg-terracotta/10'
-    },
-    {
-      label: 'Campaign Performance',
-      value: '94%',
-      change: '+8%',
-      trend: 'up',
-      icon: Target,
-      color: 'text-coral',
-      bgColor: 'bg-coral/10'
-    },
-    {
-      label: 'Average Engagement',
-      value: '78%',
-      change: '-3%',
-      trend: 'down',
-      icon: Activity,
-      color: 'text-terracotta',
-      bgColor: 'bg-terracotta/10'
-    }
-  ];
-
-  const mockCampaignMetrics = [
-    {
-      name: 'STEM Education Program',
-      investment: 'LKR 500K',
-      roi: '320%',
-      studentsReached: 2150,
-      engagementRate: '85%',
-      status: 'active',
-      progress: 75
-    },
-    {
-      name: 'Digital Literacy Initiative',
-      investment: 'LKR 300K',
-      roi: '245%',
-      studentsReached: 1680,
-      engagementRate: '72%',
-      status: 'completed',
-      progress: 100
-    },
-    {
-      name: 'Rural School Technology',
-      investment: 'LKR 750K',
-      roi: '380%',
-      studentsReached: 3240,
-      engagementRate: '91%',
-      status: 'completed',
-      progress: 100
-    },
-    {
-      name: 'Teacher Training Program',
-      investment: 'LKR 200K',
-      roi: '195%',
-      studentsReached: 890,
-      engagementRate: '68%',
-      status: 'ongoing',
-      progress: 45
-    }
-  ];
-
-  const mockMonthlyData = [
-    { month: 'Jan', investment: 450, returns: 1125, students: 2800 },
-    { month: 'Feb', investment: 620, returns: 1550, students: 3200 },
-    { month: 'Mar', investment: 580, returns: 1450, students: 3600 },
-    { month: 'Apr', investment: 720, returns: 1800, students: 4100 },
-    { month: 'May', investment: 680, returns: 1700, students: 3900 },
-    { month: 'Jun', investment: 850, returns: 2125, students: 4800 }
-  ];
-
-  const mockImpactMetrics = [
-    {
-      category: 'Educational Impact',
-      metrics: [
-        { label: 'Schools Partnered', value: '156', change: '+23' },
-        { label: 'Teachers Trained', value: '1,240', change: '+180' },
-        { label: 'Learning Hours', value: '45,600', change: '+2,340' },
-        { label: 'Certification Rate', value: '87%', change: '+5%' }
-      ]
-    },
-    {
-      category: 'Business Impact',
-      metrics: [
-        { label: 'Brand Awareness', value: '+340%', change: '+45%' },
-        { label: 'Lead Generation', value: '2,840', change: '+560' },
-        { label: 'Media Coverage', value: 'LKR 8.5M', change: '+LKR 1.2M' },
-        { label: 'Partnership Inquiries', value: '89', change: '+12' }
-      ]
-    }
-  ];
-
   const getTrendIcon = (trend: string) => {
     return trend === 'up' ? (
       <ArrowUp className="w-4 h-4 text-green-500" />
@@ -294,10 +190,18 @@ const SponsorAnalyticsPage = () => {
     }
   };
 
-  const overviewMetrics = analyticsData.overviewMetrics.length > 0 ? analyticsData.overviewMetrics : mockOverviewMetrics;
-  const campaignMetrics = analyticsData.campaignMetrics.length > 0 ? analyticsData.campaignMetrics : mockCampaignMetrics;
-  const monthlyData = analyticsData.monthlyData.length > 0 ? analyticsData.monthlyData : mockMonthlyData;
-  const impactMetrics = analyticsData.impactMetrics.length > 0 ? analyticsData.impactMetrics : mockImpactMetrics;
+  const overviewMetrics = analyticsData.overviewMetrics;
+  const campaignMetrics = analyticsData.campaignMetrics;
+  const impactMetrics = analyticsData.impactMetrics;
+
+  // Real, data-derived insights — only shown when there's real data to derive
+  // them from. No fabricated "recommendation" copy: unlike a top performer or
+  // a real trend figure, a genuine recommendation would need a model this
+  // platform doesn't have, so that card is omitted rather than faked.
+  const topPerformer = campaignMetrics.length > 0
+    ? [...campaignMetrics].sort((a, b) => (parseFloat(b.roi) || 0) - (parseFloat(a.roi) || 0))[0]
+    : null;
+  const growthMetric = overviewMetrics.find((m) => m.label === 'Students Reached') || overviewMetrics[0] || null;
 
   if (loading) {
     return (
@@ -385,9 +289,17 @@ const SponsorAnalyticsPage = () => {
             </div>
 
             {}
+            {overviewMetrics.length === 0 ? (
+              <EmptyState
+                size="sm"
+                title="No analytics yet"
+                body="Once you launch a campaign or event, your ROI and reach numbers will show up here."
+                className="mb-8 flex flex-col items-center text-center py-8"
+              />
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               {overviewMetrics.map((metric, index) => {
-                const Icon = metric.icon;
+                const Icon = ICON_MAP[metric.icon] || BarChart3;
                 return (
                   <motion.div
                     key={index}
@@ -415,6 +327,7 @@ const SponsorAnalyticsPage = () => {
                 );
               })}
             </div>
+            )}
 
             {}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
@@ -473,6 +386,14 @@ const SponsorAnalyticsPage = () => {
                   View Details
                 </button>
               </div>
+              {campaignMetrics.length === 0 ? (
+                <EmptyState
+                  size="sm"
+                  title="No campaigns yet"
+                  body="Launch a campaign to see its investment, ROI, and reach here."
+                  className="flex flex-col items-center text-center py-6"
+                />
+              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
@@ -519,9 +440,11 @@ const SponsorAnalyticsPage = () => {
                   </tbody>
                 </table>
               </div>
+              )}
             </motion.div>
 
             {}
+            {impactMetrics.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
               {impactMetrics.map((category, categoryIndex) => (
                 <motion.div
@@ -548,8 +471,10 @@ const SponsorAnalyticsPage = () => {
                 </motion.div>
               ))}
             </div>
+            )}
 
             {}
+            {(topPerformer || growthMetric) && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -558,35 +483,31 @@ const SponsorAnalyticsPage = () => {
             >
               <h3 className="text-lg font-semibold text-espresso mb-6">Performance Insights</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {topPerformer && (
                 <div className="p-4 bg-forest/10 rounded-lg">
                   <div className="flex items-center mb-3">
                     <Zap className="w-5 h-5 text-forest mr-2" />
                     <h4 className="font-medium text-forest-500">Top Performer</h4>
                   </div>
                   <p className="text-sm text-forest-500">
-                    Rural School Technology campaign achieved 380% ROI, exceeding target by 80%
+                    {topPerformer!.name} leads with {topPerformer!.roi} ROI, reaching {formatNumber(topPerformer!.studentsReached, { locale: language })} students
                   </p>
                 </div>
+                )}
+                {growthMetric && (
                 <div className="p-4 bg-terracotta/10 rounded-lg">
                   <div className="flex items-center mb-3">
                     <TrendingUp className="w-5 h-5 text-terracotta mr-2" />
-                    <h4 className="font-medium text-terracotta-500">Growth Trend</h4>
+                    <h4 className="font-medium text-terracotta-500">{growthMetric.label} Trend</h4>
                   </div>
                   <p className="text-sm text-terracotta-500">
-                    Student engagement increased by 24% compared to previous quarter
+                    {growthMetric.label} is {growthMetric.value}, {growthMetric.change} versus the previous period
                   </p>
                 </div>
-                <div className="p-4 bg-terracotta/10 rounded-lg">
-                  <div className="flex items-center mb-3">
-                    <Target className="w-5 h-5 text-terracotta mr-2" />
-                    <h4 className="font-medium text-orange-800">Recommendation</h4>
-                  </div>
-                  <p className="text-sm text-orange-700">
-                    Focus on STEM programs for highest ROI and impact potential
-                  </p>
-                </div>
+                )}
               </div>
             </motion.div>
+            )}
 
             {}
             <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-lg p-8 text-center">

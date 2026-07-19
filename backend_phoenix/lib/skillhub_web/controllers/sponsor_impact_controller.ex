@@ -7,8 +7,21 @@ defmodule SkillHubWeb.SponsorImpactController do
 
   def summary(conn, _params) do
     with {:ok, user} <- require_role(conn, "sponsor") do
-      sponsor_id = to_string(user.id)
+      # scholarships/student_funding_grants.sponsor_id references
+      # sponsor_profiles.id, NOT users.id — using the raw user id here meant
+      # every query below matched nothing, so this endpoint always returned
+      # zeros regardless of real sponsor activity.
+      case SQL.one("select id::text as id from public.sponsor_profiles where user_id = $1::uuid", [user.id]) do
+        nil ->
+          conn |> put_status(404) |> json(%{detail: "Sponsor profile not set up yet."})
 
+        %{id: sponsor_id} ->
+          summary_for(conn, sponsor_id)
+      end
+    end
+  end
+
+  defp summary_for(conn, sponsor_id) do
       sch =
         SQL.one(
           """
@@ -124,6 +137,5 @@ defmodule SkillHubWeb.SponsorImpactController do
         geography: geography,
         disability_breakdown: disability
       })
-    end
   end
 end

@@ -28,11 +28,6 @@ interface EarningsData {
     amount: number;
     status: string;
   }>;
-  revenueSources: {
-    courses: number;
-    workshops: number;
-    consulting: number;
-  };
 }
 
 interface PayoutRow {
@@ -116,10 +111,20 @@ const EarningsPage = () => {
       }
 
       setEarningsData({
+        // Real field names from GET /teachers/earnings (teacher_controller.ex
+        // earnings/2) — this page previously read total_earnings correctly
+        // but pending_balance/avg_per_student/monthly_data/revenue_sources
+        // don't exist in that response at all, so those were always the
+        // hardcoded fallback, never real data.
         totalEarnings: earnings.total_earnings || 0,
-        pendingBalance: earnings.pending_balance || 0,
-        avgPerStudent: earnings.avg_per_student || 0,
-        monthlyData: earnings.monthly_data || [],
+        pendingBalance: earnings.pending_payments || 0,
+        avgPerStudent: 0,
+        monthlyData: (earnings.monthly_earnings || []).map((m: any) => ({
+          month: m.month,
+          earnings: m.total || 0,
+          students: 0,
+          courses: 0,
+        })),
         transactions: transactions.map((t: any) => ({
           id: t.id || `TX-${Math.random().toString(36).substr(2, 9)}`,
           date: t.created_at ? new Date(t.created_at).toLocaleDateString() : 'N/A',
@@ -127,11 +132,6 @@ const EarningsPage = () => {
           amount: t.amount || 0,
           status: t.status || 'Completed'
         })),
-        revenueSources: earnings.revenue_sources || {
-          courses: 45,
-          workshops: 30,
-          consulting: 25
-        }
       });
     } catch (err: any) {
       console.error('Earnings error:', err);
@@ -374,73 +374,16 @@ const EarningsPage = () => {
 
             <div className="clay-card p-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-espresso">Revenue Sources</h2>
+                <h2 className="text-xl font-semibold text-espresso">Total Revenue</h2>
                 <DollarSign className="w-6 h-6 text-espresso/55" />
               </div>
-              <div className="flex flex-col items-center">
-                <div className="relative w-48 h-48 mb-4">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-espresso">
-                        {formatCurrency(earningsData?.totalEarnings || 0, { locale: language, compact: true })}
-                      </div>
-                      <div className="text-sm text-espresso/70">Total Revenue</div>
-                    </div>
-                  </div>
-                  <svg viewBox="0 0 36 36" className="w-full h-full">
-                    <path
-                      d="M18 2.0845
-                        a 15.9155 15.9155 0 0 1 0 31.831
-                        a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#F5E8D3"
-                      strokeWidth="3"
-                    />
-                    <path
-                      d="M18 2.0845
-                        a 15.9155 15.9155 0 0 1 0 31.831
-                        a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#7A9B5C"
-                      strokeWidth="3"
-                      strokeDasharray={`${earningsData?.revenueSources?.courses || 45}, 100`}
-                    />
-                    <path
-                      d="M18 2.0845
-                        a 15.9155 15.9155 0 0 1 0 31.831
-                        a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#E97A3C"
-                      strokeWidth="3"
-                      strokeDasharray={`${earningsData?.revenueSources?.workshops || 30}, 100`}
-                      strokeDashoffset={`-${earningsData?.revenueSources?.courses || 45}`}
-                    />
-                    <path
-                      d="M18 2.0845
-                        a 15.9155 15.9155 0 0 1 0 31.831
-                        a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#F4C542"
-                      strokeWidth="3"
-                      strokeDasharray={`${earningsData?.revenueSources?.consulting || 25}, 100`}
-                      strokeDashoffset={`-${(earningsData?.revenueSources?.courses || 45) + (earningsData?.revenueSources?.workshops || 30)}`}
-                    />
-                  </svg>
+              <div className="flex flex-col items-center justify-center h-56 text-center">
+                <div className="text-3xl font-bold text-espresso mb-2">
+                  {formatCurrency(earningsData?.totalEarnings || 0, { locale: language, compact: true })}
                 </div>
-                <div className="space-y-2 w-full max-w-xs">
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 bg-forest-300 border border-espresso rounded mr-2"></div>
-                    <span className="text-espresso">Courses ({earningsData?.revenueSources?.courses || 45}%)</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 bg-terracotta border border-espresso rounded mr-2"></div>
-                    <span className="text-espresso">Workshops ({earningsData?.revenueSources?.workshops || 30}%)</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 bg-mustard-300 border border-espresso rounded mr-2"></div>
-                    <span className="text-espresso">Consulting ({earningsData?.revenueSources?.consulting || 25}%)</span>
-                  </div>
-                </div>
+                <p className="text-sm text-espresso/55">
+                  All-time earnings from live session payments.
+                </p>
               </div>
             </div>
           </div>

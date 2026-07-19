@@ -38,7 +38,19 @@ defmodule SkillHubWeb.TeacherController do
           [tid]
         )
 
+      earnings =
+        SQL.one(
+          """
+          select
+            coalesce(sum(p.amount) filter (where p.payment_status = 'completed'), 0)::float total,
+            coalesce(sum(p.amount) filter (where p.payment_status = 'completed' and date_trunc('month', p.created_at) = date_trunc('month', now())), 0)::float this_month
+          from public.live_session_payments p join public.live_sessions s on s.id = p.session_id where s.teacher_id = $1::uuid
+          """,
+          [tid]
+        )
+
       name = String.trim("#{up[:first_name] || ""} #{up[:last_name] || ""}")
+      recent_reviews = teacher_reviews_for(tid, 5)
 
       json(conn, %{
         success: true,
@@ -51,12 +63,31 @@ defmodule SkillHubWeb.TeacherController do
         stats: %{
           total_students: (if counts.total_students > 0, do: counts.total_students, else: tp["total_students"] || 0),
           total_courses: counts.total_courses, active_sessions: counts.active_sessions, completed_sessions: counts.completed_sessions,
-          total_earnings: 0, monthly_earnings: 0, this_month_earnings: 0,
+          total_earnings: earnings.total, monthly_earnings: earnings.this_month, this_month_earnings: earnings.this_month,
           average_rating: numf(tp["average_rating"]), total_reviews: tp["total_reviews"] || 0
         },
-        subjects: [], recent_reviews: []
+        subjects: [], recent_reviews: recent_reviews
       })
     end
+  end
+
+  # GET /teachers/:teacher_id/reviews — public (any authenticated user), backs
+  # the student-facing teacher profile page.
+  def reviews(conn, %{"teacher_id" => tid}) do
+    json(conn, %{success: true, reviews: teacher_reviews_for(tid, 50)})
+  end
+
+  defp teacher_reviews_for(teacher_id, limit) do
+    SQL.maps(
+      """
+      select r.id::text id, r.rating, r.title, r.content, r.created_at,
+        nullif(trim(coalesce(up.first_name,'') || ' ' || coalesce(up.last_name,'')), '') reviewer_name
+      from public.reviews r left join public.user_profiles up on up.user_id = r.reviewer_id
+      where r.teacher_id = $1::uuid order by r.created_at desc limit #{limit}
+      """,
+      [teacher_id]
+    )
+    |> Enum.map(fn r -> %{id: r.id, rating: r.rating, title: r.title, content: r.content, created_at: r.created_at, reviewer_name: r.reviewer_name || "Anonymous student"} end)
   end
 
   # ---- sessions -------------------------------------------------------------
@@ -70,6 +101,17 @@ defmodule SkillHubWeb.TeacherController do
         upcoming_count: Enum.count(sessions, &(&1["status"] == "scheduled")),
         completed_count: Enum.count(sessions, &(&1["status"] == "completed"))
       })
+    end
+  end
+
+  # Fetch a single session by id — any authenticated user (not just its
+  # teacher). Backs the student pre-payment review screen, which needs the
+  # title/price/currency before a purchase exists to scope an ownership check
+  # against (mirrors PaymentController's own unrestricted session lookup).
+  def get_session(conn, %{"session_id" => id}) do
+    case SQL.json_one("select to_jsonb(s) as row from public.live_sessions s where s.id = $1::uuid", [id]) do
+      nil -> conn |> put_status(404) |> json(%{detail: "Session not found"})
+      session -> json(conn, session)
     end
   end
 
@@ -967,21 +1009,76 @@ defmodule SkillHubWeb.TeacherController do
     end
   end
 
-  def bulk_apply_template(conn, _params) do
-    with {:ok, _} <- require_role(conn, "teacher") do
-      json(conn, %{success: true, message: "Template applied", created: 0})
+  # POST /teachers/schedule/bulk-apply-template — creates real availability
+  # blocks for each matching weekday across the date range. Was a total
+  # no-op stub (`created: 0` unconditionally) — the frontend's "Apply
+  # Template" button claimed success without ever touching the database.
+  # Only one template exists (see `schedule/2`'s hardcoded `templates` list),
+  # so only its pattern is defined here — a real, if minimal, mapping.
+  def bulk_apply_template(conn, params) do
+    with {:ok, tp} <- teacher_profile(conn) do
+      weeks = int(params["weeks_count"], 1) |> max(1) |> min(26)
+      start_date = parse_date(params["start_date"]) || Date.utc_today()
+      pattern = template_pattern(params["template_id"])
+
+      if pattern == [] do
+        conn |> put_status(400) |> json(%{detail: "Unknown template"})
+      else
+        weekday_times = Map.new(pattern, fn {wd, s, e} -> {wd, {s, e}} end)
+        total_days = weeks * 7
+
+        created =
+          Enum.reduce(0..(total_days - 1), 0, fn offset, acc ->
+            date = Date.add(start_date, offset)
+
+            case Map.get(weekday_times, Date.day_of_week(date)) do
+              nil ->
+                acc
+
+              {start_time, end_time} ->
+                date_s = Date.to_iso8601(date)
+
+                SQL.scalar(
+                  """
+                  insert into public.live_sessions (id, teacher_id, title, description, scheduled_start, scheduled_end, session_type, session_mode, status, current_participants)
+                  values (gen_random_uuid(), $1::uuid, 'Availability', $2, $3::text::timestamp, $4::text::timestamp, 'meeting'::session_type, 'online'::session_mode, 'scheduled', 0) returning id::text
+                  """,
+                  [tp["id"], "Availability from template", "#{date_s}T#{start_time}:00", "#{date_s}T#{end_time}:00"]
+                )
+
+                acc + 1
+            end
+          end)
+
+        json(conn, %{success: true, message: "Template applied", created: created})
+      end
     end
   end
+
+  defp template_pattern("template_default"),
+    do: [{1, "09:00", "17:00"}, {2, "09:00", "17:00"}, {3, "09:00", "17:00"}, {4, "09:00", "17:00"}, {5, "09:00", "17:00"}]
+
+  defp template_pattern(_), do: []
+
+  defp parse_date(s) when is_binary(s) do
+    case Date.from_iso8601(s) do
+      {:ok, d} -> d
+      _ -> nil
+    end
+  end
+
+  defp parse_date(_), do: nil
 
   def bulk_reschedule(conn, params) do
     with {:ok, tp} <- teacher_profile(conn) do
       ids = params["session_ids"] || []
-      shift = params["shift_minutes"] || 0
+      # apiClient.bulkRescheduleAppointments (lib/api.ts) sends time_offset_hours.
+      shift = round(numf(params["time_offset_hours"]) * 60)
 
       updated =
         if is_list(ids) and ids != [] do
           SQL.scalar(
-            "with u as (update public.live_sessions set scheduled_start = scheduled_start + ($3 || ' minutes')::interval, scheduled_end = scheduled_end + ($3 || ' minutes')::interval where teacher_id = $1::uuid and id = any($2::uuid[]) returning 1) select count(*)::int from u",
+            "with u as (update public.live_sessions set scheduled_start = scheduled_start + ($3 || ' minutes')::interval, scheduled_end = scheduled_end + ($3 || ' minutes')::interval where teacher_id = $1::uuid and id = any($2::text[]::uuid[]) returning 1) select count(*)::int from u",
             [tp["id"], ids, to_string(shift)], 0
           )
         else
@@ -1007,7 +1104,7 @@ defmodule SkillHubWeb.TeacherController do
         not is_nil(SQL.one("select id from public.course_enrollments where student_id = $1::uuid and course_id = $2::uuid", [student.id, course_id])) ->
           conn |> put_status(400) |> json(%{detail: "Student already enrolled"})
         true ->
-          eid = SQL.scalar("insert into public.course_enrollments (id, student_id, course_id, status, progress_percentage, enrolled_at) values (gen_random_uuid(), $1::uuid, $2::uuid, 'active', 0, now()) returning id::text", [student.id, course_id])
+          eid = SQL.scalar("insert into public.course_enrollments (id, student_id, course_id, teacher_id, status, progress_percentage, enrolled_at) values (gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, 'active', 0, now()) returning id::text", [student.id, course_id, tp["id"]])
           json(conn, %{success: true, message: "Successfully enrolled student in #{course.title}", data: %{id: eid}})
       end
     end
@@ -1058,24 +1155,215 @@ defmodule SkillHubWeb.TeacherController do
     end
   end
 
+  # POST /teachers/students/report — bulk report (CSV/Excel/PDF) across all
+  # of this teacher's students, ported from teachers.py's generate_student_report
+  # + generate_{csv,excel,pdf}_report. Unlike the Python original, the
+  # date_from/date_to params are actually applied to the query (the Python
+  # version parsed and validated them but never used them in the SQL).
+  @report_types ~w(progress attendance assignments full_academic)
+  @report_formats ~w(pdf excel csv)
+
   def report_student(conn, params) do
     with {:ok, tp} <- teacher_profile(conn) do
-      student_id = params["student_id"]
+      report_type = params["report_type"]
+      format = params["format"]
+      date_from = present(params["date_from"])
+      date_to = present(params["date_to"])
 
-      summary =
-        SQL.one(
-          """
-          select count(*)::int courses, coalesce(round(avg(coalesce(e.progress_percentage, 0)), 1), 0)::float avg_progress,
-            count(*) filter (where e.status = 'completed')::int completed
-          from public.course_enrollments e join public.courses c on c.id = e.course_id
-          where e.student_id = $1::uuid and c.teacher_id = $2::uuid
-          """,
-          [student_id, tp["id"]]
-        )
+      cond do
+        format not in @report_formats ->
+          conn |> put_status(400) |> json(%{detail: "Invalid format. Use 'pdf', 'excel', or 'csv'"})
 
-      json(conn, %{success: true, data: %{student_id: student_id, courses_with_you: summary.courses, average_progress: summary.avg_progress, completed_courses: summary.completed}})
+        report_type not in @report_types ->
+          conn |> put_status(400) |> json(%{detail: "Invalid report type. Use 'progress', 'attendance', 'assignments', or 'full_academic'"})
+
+        true ->
+          {clause, args} = report_date_clause(date_from, date_to)
+
+          rows =
+            SQL.maps(
+              """
+              select ce.status::text status, coalesce(ce.progress_percentage, 0)::int progress_percentage, ce.enrolled_at,
+                u.email student_email, up.first_name, up.last_name, up.university,
+                c.title course_title
+              from public.course_enrollments ce
+              left join public.users u on ce.student_id = u.id
+              left join public.user_profiles up on u.id = up.user_id
+              left join public.courses c on ce.course_id = c.id
+              where c.teacher_id = $1::uuid#{clause}
+              order by ce.enrolled_at desc
+              """,
+              [tp["id"] | args]
+            )
+
+          if rows == [] do
+            conn |> put_status(404) |> json(%{detail: "No student data found for report generation"})
+          else
+            {title, table} = report_table(report_type, rows)
+            timestamp = Calendar.strftime(DateTime.utc_now(), "%Y%m%d_%H%M%S")
+            filename = String.replace(title, " ", "_") <> "_" <> timestamp
+            send_report(conn, format, title, table, filename)
+          end
+      end
     end
   end
+
+  defp present(nil), do: nil
+  defp present(""), do: nil
+  defp present(v), do: v
+
+  defp report_date_clause(nil, nil), do: {"", []}
+  defp report_date_clause(from_d, nil), do: {" and ce.enrolled_at >= $2::text::date", [from_d]}
+  defp report_date_clause(nil, to_d), do: {" and ce.enrolled_at < ($2::text::date + 1)", [to_d]}
+  defp report_date_clause(from_d, to_d), do: {" and ce.enrolled_at >= $2::text::date and ce.enrolled_at < ($3::text::date + 1)", [from_d, to_d]}
+
+  defp report_student_name(r) do
+    name = String.trim("#{r.first_name || ""} #{r.last_name || ""}")
+    if name == "", do: r.student_email || "Unknown", else: name
+  end
+
+  defp report_date10(nil), do: "N/A"
+  defp report_date10(%NaiveDateTime{} = d), do: d |> NaiveDateTime.to_date() |> Date.to_string()
+  defp report_date10(%DateTime{} = d), do: d |> DateTime.to_date() |> Date.to_string()
+  defp report_date10(s) when is_binary(s), do: String.slice(s, 0, 10)
+  defp report_date10(_), do: "N/A"
+
+  defp report_grade(p) when p >= 90, do: {"A", "Excellent"}
+  defp report_grade(p) when p >= 80, do: {"B", "Good"}
+  defp report_grade(p) when p >= 70, do: {"C", "Average"}
+  defp report_grade(p) when p >= 60, do: {"D", "Below Average"}
+  defp report_grade(_), do: {"F", "Needs Improvement"}
+
+  defp report_table("progress", rows) do
+    header = ["Name", "Email", "Course", "Progress %", "Status", "University", "Enrolled Date"]
+
+    data =
+      Enum.map(rows, fn r ->
+        [report_student_name(r), r.student_email || "N/A", r.course_title || "N/A",
+         to_string(r.progress_percentage), r.status || "N/A", r.university || "N/A", report_date10(r.enrolled_at)]
+      end)
+
+    {"Student Progress Report", [header | data]}
+  end
+
+  defp report_table("attendance", rows) do
+    header = ["Name", "Email", "Course", "Attendance Status", "University"]
+
+    data =
+      Enum.map(rows, fn r ->
+        attendance = if r.status == "active", do: "Present", else: "Absent"
+        [report_student_name(r), r.student_email || "N/A", r.course_title || "N/A", attendance, r.university || "N/A"]
+      end)
+
+    {"Student Attendance Report", [header | data]}
+  end
+
+  defp report_table("assignments", rows) do
+    header = ["Name", "Email", "Course", "Assignment Score", "Status", "Submission Date"]
+
+    data =
+      Enum.map(rows, fn r ->
+        [report_student_name(r), r.student_email || "N/A", r.course_title || "N/A",
+         "#{r.progress_percentage}/100", r.status || "N/A", report_date10(r.enrolled_at)]
+      end)
+
+    {"Student Assignments Report", [header | data]}
+  end
+
+  defp report_table("full_academic", rows) do
+    header = ["Name", "Email", "Course", "Progress %", "Status", "University", "Performance", "Grade"]
+
+    data =
+      Enum.map(rows, fn r ->
+        {grade, performance} = report_grade(r.progress_percentage)
+
+        [report_student_name(r), r.student_email || "N/A", r.course_title || "N/A", to_string(r.progress_percentage),
+         r.status || "N/A", r.university || "N/A", performance, grade]
+      end)
+
+    {"Full Academic Report", [header | data]}
+  end
+
+  defp send_report(conn, "csv", _title, table, filename) do
+    csv = table |> Enum.map(&csv_row/1) |> Enum.join("\r\n")
+
+    conn
+    |> put_resp_content_type("text/csv")
+    |> put_resp_header("content-disposition", ~s(attachment; filename="#{filename}.csv"))
+    |> send_resp(200, csv)
+  end
+
+  defp send_report(conn, "excel", title, table, filename) do
+    sheet = %Elixlsx.Sheet{name: String.slice(title, 0, 30), rows: table}
+    workbook = %Elixlsx.Workbook{sheets: [sheet]}
+
+    case Elixlsx.write_to_memory(workbook, "#{filename}.xlsx") do
+      {:ok, {_name, binary}} ->
+        conn
+        |> put_resp_content_type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        |> put_resp_header("content-disposition", ~s(attachment; filename="#{filename}.xlsx"))
+        |> send_resp(200, binary)
+
+      {:error, _} ->
+        conn |> put_status(500) |> json(%{detail: "Failed to generate Excel report"})
+    end
+  end
+
+  defp send_report(conn, "pdf", title, table, filename) do
+    case SkillHub.PDF.render(report_html(title, table)) do
+      {:ok, pdf} ->
+        conn
+        |> put_resp_content_type("application/pdf")
+        |> put_resp_header("content-disposition", ~s(attachment; filename="#{filename}.pdf"))
+        |> send_resp(200, pdf)
+
+      {:error, :unavailable} ->
+        conn |> put_status(503) |> json(%{detail: "PDF rendering unavailable (Chrome not found)."})
+
+      {:error, _} ->
+        conn |> put_status(500) |> json(%{detail: "Failed to render report."})
+    end
+  end
+
+  defp csv_row(fields), do: fields |> Enum.map(&csv_escape/1) |> Enum.join(",")
+
+  defp csv_escape(v) do
+    s = to_string(v)
+
+    if String.contains?(s, [",", "\"", "\n", "\r"]) do
+      "\"" <> String.replace(s, "\"", "\"\"") <> "\""
+    else
+      s
+    end
+  end
+
+  defp report_html(title, [header | rows]) do
+    thead = header |> Enum.map(&"<th>#{report_esc(&1)}</th>") |> Enum.join()
+    tbody =
+      rows
+      |> Enum.map(fn row -> "<tr>" <> (row |> Enum.map(&"<td>#{report_esc(&1)}</td>") |> Enum.join()) <> "</tr>" end)
+      |> Enum.join()
+
+    """
+    <!doctype html><html><head><meta charset="utf-8"><style>
+      @page { size: A4; margin: 14mm; }
+      body { font-family: "Segoe UI", Arial, sans-serif; color: #101828; margin: 0; }
+      h1 { font-size: 16pt; color: #1570ef; margin: 0 0 2mm; }
+      .meta { color: #667085; font-size: 9pt; margin-bottom: 6mm; }
+      table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+      th { background: #667085; color: #fff; text-align: left; padding: 2mm 2.5mm; }
+      td { padding: 2mm 2.5mm; border-bottom: 1px solid #eaecf0; }
+      tr:nth-child(even) td { background: #f9fafb; }
+    </style></head><body>
+      <h1>#{report_esc(title)}</h1>
+      <div class="meta">Generated on #{Calendar.strftime(DateTime.utc_now(), "%Y-%m-%d %H:%M:%S")} UTC &middot; #{length(rows)} record(s)</div>
+      <table><thead><tr>#{thead}</tr></thead><tbody>#{tbody}</tbody></table>
+    </body></html>
+    """
+  end
+
+  defp report_esc(nil), do: ""
+  defp report_esc(v), do: v |> to_string() |> String.replace("&", "&amp;") |> String.replace("<", "&lt;") |> String.replace(">", "&gt;")
 
   # ---- file uploads (Supabase Storage) --------------------------------------
 

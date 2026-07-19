@@ -96,15 +96,24 @@ defmodule SkillHubWeb.UserController do
   end
 
   defp role_stats("sponsor", user_id) do
+    # student_funding_grants.sponsor_id references sponsor_profiles.id, not
+    # users.id — plus the table name itself was wrong (scholarship_grants
+    # doesn't exist). Both meant this always silently returned zero.
     safe(fn ->
-      c =
-        SQL.one(
-          "select count(*)::int total, count(*) filter (where status = 'active')::int active " <>
-            "from public.scholarship_grants where sponsor_id = $1::uuid",
-          [user_id]
-        )
+      sp = SQL.one("select id::text from public.sponsor_profiles where user_id = $1::uuid", [user_id])
 
-      %{total_grants: c.total, active_grants: c.active}
+      if sp do
+        c =
+          SQL.one(
+            "select count(*)::int total, count(*) filter (where status = 'available')::int active " <>
+              "from public.student_funding_grants where sponsor_id = $1::uuid",
+            [sp[:id]]
+          )
+
+        %{total_grants: c.total, active_grants: c.active}
+      else
+        %{total_grants: 0, active_grants: 0}
+      end
     end) || %{total_grants: 0, active_grants: 0}
   end
 

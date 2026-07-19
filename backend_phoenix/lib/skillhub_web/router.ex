@@ -72,6 +72,7 @@ defmodule SkillHubWeb.Router do
     patch "/accessibility/preferences", AccessibilityController, :update_preferences
     get "/accessibility/presets", AccessibilityController, :get_presets
     get "/accessibility/guardian-links", AccessibilityController, :guardian_links
+    patch "/accessibility/guardian-links/:id", AccessibilityController, :update_guardian_link
     get "/accessibility/onboarding-status", AccessibilityController, :onboarding_status
 
     # Admin (send-session-reminders stays proxied — email/SMS fan-out)
@@ -140,6 +141,7 @@ defmodule SkillHubWeb.Router do
     get "/teachers/payments/rest", TeacherController, :payments
     get "/teachers/health", TeacherController, :health
     get "/teachers/sessions", TeacherController, :sessions
+    get "/teachers/sessions/:session_id", TeacherController, :get_session
     post "/teachers/sessions", TeacherController, :create_session
     put "/teachers/sessions/:session_id", TeacherController, :update_session
     put "/teachers/sessions/:session_id/status", TeacherController, :update_session_status
@@ -185,6 +187,8 @@ defmodule SkillHubWeb.Router do
     get "/students/profile", StudentController, :profile
     put "/students/profile", StudentController, :update_profile
     get "/students/find-teachers", StudentController, :find_teachers
+    post "/students/reviews", StudentController, :create_review
+    get "/teachers/:teacher_id/reviews", TeacherController, :reviews
     get "/students/subjects", StudentController, :subjects
     post "/students/contact-teacher", StudentController, :contact_teacher
     get "/students/session-recordings", StudentController, :session_recordings

@@ -268,7 +268,7 @@ export const AccessibilityProvider: React.FC<AccessibilityProviderProps> = ({ ch
   const applyPreset = useCallback(async (presetId: string) => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`/api/v1/accessibility/presets/${presetId}/apply`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/accessibility/presets/${presetId}/apply`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -296,7 +296,7 @@ export const AccessibilityProvider: React.FC<AccessibilityProviderProps> = ({ ch
       const token = localStorage.getItem('access_token');
       if (!token) return;
 
-      await fetch('/api/v1/accessibility/preferences', {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/accessibility/preferences`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -314,7 +314,7 @@ export const AccessibilityProvider: React.FC<AccessibilityProviderProps> = ({ ch
       const token = localStorage.getItem('access_token');
       if (!token) return;
 
-      const response = await fetch('/api/v1/accessibility/preferences', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/accessibility/preferences`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

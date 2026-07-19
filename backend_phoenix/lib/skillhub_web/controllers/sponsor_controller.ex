@@ -45,14 +45,18 @@ defmodule SkillHubWeb.SponsorController do
       prev_total = prev.budget + prev_event
       prev_roi = if prev_total > 0, do: Float.round(prev.students * 1000 / prev_total * 100, 1), else: 0.0
 
+      events_hosted = event_summary(profile["company_name"], user_id).totalEvents
+
       json(conn, %{
         success: true,
         data: %{
           stats: %{
-            activeCampaigns: %{value: to_string(cur.active), change: int_change(cur.active, prev.active)},
-            studentsReached: %{value: commas(students), change: pct_change(students, prev.students)},
-            investment: %{value: lkr_compact(total), change: pct_change(total, prev_total)},
-            roi: %{value: "#{roi}%", change: pct_change(roi, prev_roi)}
+            active_campaigns: cur.active, active_campaigns_change: int_change(cur.active, prev.active),
+            total_budget: total, total_budget_change: pct_change(total, prev_total),
+            students_reached: students, students_reached_change: pct_change(students, prev.students),
+            events_hosted: events_hosted,
+            teacher_partnerships: 0,
+            roi: roi, roi_change: pct_change(roi, prev_roi)
           },
           sponsor: %{
             id: profile["id"],

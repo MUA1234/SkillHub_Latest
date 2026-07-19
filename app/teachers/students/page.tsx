@@ -129,6 +129,7 @@ const TeacherStudentsPage = () => {
   const [showNeedAttentionModal, setShowNeedAttentionModal] = useState(false);
   
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importCourseId, setImportCourseId] = useState('');
   const [newStudent, setNewStudent] = useState<NewStudent>({
     email: '',
     course_id: ''
@@ -380,25 +381,96 @@ const TeacherStudentsPage = () => {
     timestamp: string;
   }>>([]);
 
+  // Minimal CSV parser (handles quoted fields containing commas). No backend
+  // bulk-import endpoint exists, so this reuses the real single-student-add
+  // endpoint (apiClient.addStudentToCourse) per row.
+  const parseCSV = (text: string): string[][] => {
+    return text
+      .split(/\r\n|\n|\r/)
+      .filter((line) => line.trim() !== '')
+      .map((line) => {
+        const cells: string[] = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (inQuotes) {
+            if (ch === '"') {
+              if (line[i + 1] === '"') { cur += '"'; i++; } else { inQuotes = false; }
+            } else {
+              cur += ch;
+            }
+          } else if (ch === '"') {
+            inQuotes = true;
+          } else if (ch === ',') {
+            cells.push(cur);
+            cur = '';
+          } else {
+            cur += ch;
+          }
+        }
+        cells.push(cur);
+        return cells.map((c) => c.trim());
+      });
+  };
+
   const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importFile) {
       alert('Please select a file to import');
       return;
     }
+    if (!importCourseId) {
+      alert('Please select a course to enroll the imported students into');
+      return;
+    }
 
     try {
       setImportLoading(true);
-      
-      console.log('Importing student data from:', importFile);
-      
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      alert(`Successfully imported data from: ${importFile.name}`);
+
+      const text = await importFile.text();
+      const rows = parseCSV(text);
+      if (rows.length === 0) {
+        alert('The CSV file is empty');
+        return;
+      }
+
+      const header = rows[0].map((h) => h.toLowerCase());
+      const emailIdx = header.findIndex((h) => h.includes('email'));
+      const courseIdx = header.findIndex((h) => h === 'course_id' || h === 'course');
+      const hasHeader = emailIdx !== -1;
+      const dataRows = hasHeader ? rows.slice(1) : rows;
+      const effectiveEmailIdx = hasHeader ? emailIdx : 0;
+
+      const entries = dataRows
+        .map((row) => ({
+          email: (row[effectiveEmailIdx] || '').trim(),
+          courseId: courseIdx >= 0 && row[courseIdx] ? row[courseIdx].trim() : importCourseId,
+        }))
+        .filter((r) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
+
+      if (entries.length === 0) {
+        alert('No valid email addresses found. Make sure the CSV has an "email" column (or one email per line).');
+        return;
+      }
+
+      const results = await Promise.allSettled(
+        entries.map((entry) => apiClient.addStudentToCourse(entry.email, entry.courseId))
+      );
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
+
       setShowImportModal(false);
       setImportFile(null);
-      
+      setImportCourseId('');
+
       await fetchStudentsData();
+
+      alert(
+        failed === 0
+          ? `Imported ${succeeded} student${succeeded === 1 ? '' : 's'} successfully.`
+          : `Imported ${succeeded} of ${entries.length} student(s). ${failed} failed — likely no existing account with that email, or already enrolled.`
+      );
     } catch (err: any) {
       console.error('Error importing students:', err);
       alert(`Failed to import students: ${err.message || 'Unknown error'}`);
@@ -965,9 +1037,32 @@ const TeacherStudentsPage = () => {
                       Selected: {importFile.name}
                     </p>
                   )}
+                  <p className="mt-2 text-xs text-espresso/55">
+                    Needs an "email" column (one address per row). A "course_id" column
+                    can set the course per-row; otherwise every row uses the course
+                    selected below.
+                  </p>
+                </div>
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-espresso mb-1">
+                    Course
+                  </label>
+                  <select
+                    value={importCourseId}
+                    onChange={(e) => setImportCourseId(e.target.value)}
+                    className="w-full px-3 py-2 bg-cream-100 border-2 border-espresso/15 rounded-xl text-espresso placeholder:text-espresso/45 focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta outline-none transition"
+                    required
+                  >
+                    <option value="">Select a course</option>
+                    {teacherCourses.map(course => (
+                      <option key={course.id} value={course.id}>
+                        {course.title} {course.level ? `(${course.level})` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="flex justify-end space-x-3">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setShowImportModal(false)}
                     className="px-4 py-2 border border-espresso/20 rounded-lg text-espresso hover:bg-cream-100"

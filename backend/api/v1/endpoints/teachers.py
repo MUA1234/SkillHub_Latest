@@ -655,9 +655,13 @@ async def upload_teacher_avatar(
 ):
     """Upload teacher avatar"""
     from services.storage_service import AvatarService
-    
-    teacher_profile = await get_teacher_profile(current_user, db)
-    
+
+    if current_user.role != UserRole.TEACHER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only teachers can access this endpoint"
+        )
+
     try:
         upload_result = await AvatarService.upload_avatar(
             file=file,
@@ -670,11 +674,13 @@ async def upload_teacher_avatar(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Avatar upload failed: {str(e)}"
         )
-    
-    if current_user.profile:
-        current_user.profile.avatar_url = upload_result["file_url"]
-        await db.commit()
-    
+
+    SupabaseREST.update(
+        "user_profiles",
+        {"avatar_url": upload_result["file_url"]},
+        {"user_id": str(current_user.id)}
+    )
+
     return {
         "message": "Avatar uploaded successfully",
         "avatar_url": upload_result["file_url"]

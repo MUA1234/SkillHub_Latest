@@ -1095,6 +1095,20 @@ class APIClient {
     }
   }
 
+  /** Content items for one of the teacher's courses. Native Phoenix route,
+   *  returns raw `course_content` rows (field names match the table exactly). */
+  async getTeacherContent(
+    courseId: string,
+    params: { content_type?: string; access_level?: string; page?: number; limit?: number } = {}
+  ): Promise<{ success: boolean; content: any[]; total_count: number; page: number; limit: number }> {
+    const qs = new URLSearchParams({ course_id: courseId });
+    if (params.content_type) qs.set("content_type", params.content_type);
+    if (params.access_level) qs.set("access_level", params.access_level);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    return this.request(`/api/v1/teachers/content?${qs.toString()}`);
+  }
+
   async getTeacherCoursesList(): Promise<any> {
     try {
       return await this.request("/api/v1/teachers/courses/list");
@@ -1451,6 +1465,7 @@ class APIClient {
       min_rating?: number;
       max_rate?: number;
       online_only?: boolean;
+      teacher_id?: string;
       page?: number;
       limit?: number;
     } = {}
@@ -1470,6 +1485,29 @@ class APIClient {
 
   async getSubjectsForStudents(): Promise<any> {
     return this.request("/api/v1/students/subjects");
+  }
+
+  async getTeacherReviews(teacherId: string): Promise<{
+    success: boolean;
+    reviews: Array<{ id: string; rating: number; title?: string; content?: string; created_at: string; reviewer_name: string }>;
+  }> {
+    return this.request(`/api/v1/teachers/${encodeURIComponent(teacherId)}/reviews`);
+  }
+
+  /** Submit (or update, if the student already reviewed this teacher) a
+   *  review. Requires the student to be enrolled in one of the teacher's
+   *  courses — enforced server-side. */
+  async submitTeacherReview(payload: {
+    teacher_id: string;
+    rating: number;
+    title?: string;
+    content?: string;
+    course_id?: string;
+  }): Promise<{ success: boolean; review: any }> {
+    return this.request("/api/v1/students/reviews", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   }
 
   async contactTeacher(
@@ -1837,7 +1875,7 @@ class APIClient {
   }): Promise<any> {
     const formData = new FormData();
     rescheduleData.session_ids.forEach((id) =>
-      formData.append("session_ids", id)
+      formData.append("session_ids[]", id)
     );
     formData.append(
       "time_offset_hours",
@@ -2311,8 +2349,34 @@ class APIClient {
     }
   }
 
-  async getStudentWishlist(): Promise<any> {
+  async getStudentWishlist(): Promise<{
+    success: boolean;
+    data: Array<{
+      wishlist_id: string;
+      course_id: string;
+      title: string;
+      description?: string;
+      thumbnail_url?: string;
+      price: number;
+      teacher_name: string;
+      subject: string;
+      added_at: string;
+    }>;
+  }> {
     return this.request("/api/v1/students/wishlist");
+  }
+
+  async addToWishlist(courseId: string): Promise<{ success: boolean; message: string; id: string }> {
+    return this.request("/api/v1/students/wishlist", {
+      method: "POST",
+      body: JSON.stringify({ course_id: courseId }),
+    });
+  }
+
+  async removeFromWishlist(courseId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/v1/students/wishlist/${encodeURIComponent(courseId)}`, {
+      method: "DELETE",
+    });
   }
 
   async getTeacherPaymentHistory(

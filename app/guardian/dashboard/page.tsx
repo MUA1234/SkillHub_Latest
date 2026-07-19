@@ -295,7 +295,7 @@ function DashboardPanels({
                     </p>
                     <p className="text-xs text-espresso/55">
                       {e.status} • last active{' '}
-                      {e.last_activity_at ? new Date(e.last_activity_at).toLocaleDateString() : '—'}
+                      {e.last_accessed ? new Date(e.last_accessed).toLocaleDateString() : '—'}
                     </p>
                   </div>
                   <div className="text-sm font-semibold text-espresso flex-shrink-0">

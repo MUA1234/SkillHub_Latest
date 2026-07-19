@@ -108,7 +108,7 @@ export function useRealtimeSignaling(
         const token = localStorage.getItem('access_token');
 
         if (token) {
-          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/webrtc/signaling`, {
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/meetings/signaling`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

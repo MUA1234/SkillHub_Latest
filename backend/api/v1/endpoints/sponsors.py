@@ -1033,7 +1033,7 @@ async def get_sponsorship_requests(
                 "teacherTitle": row.teacher_title or "Teacher",
                 "school": "To be updated",
                 "location": "Sri Lanka",
-                "rating": float(row.average_rating) if row.average_rating else 4.5,
+                "rating": float(row.average_rating) if row.average_rating else None,
                 "experience": f"{row.experience_years or 5} years",
                 "projectTitle": row.title,
                 "projectDescription": row.description or "No description provided",

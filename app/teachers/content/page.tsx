@@ -193,20 +193,23 @@ const TeacherContentPage = () => {
 
   const fetchCourseContent = async (courseId: string) => {
     try {
-      const response = await apiClient.getTeacherCourses();
-      
-      const mockContentData: ContentData = {
-        content_items: [],
-        total_count: 0,
-        course: response.courses.find((c: any) => c.id === courseId) || response.courses[0]
+      const [coursesResponse, contentResponse] = await Promise.all([
+        apiClient.getTeacherCourses(),
+        apiClient.getTeacherContent(courseId, { limit: 100 }),
+      ]);
+
+      const realContentData: ContentData = {
+        content_items: contentResponse.content || [],
+        total_count: contentResponse.total_count || 0,
+        course: coursesResponse.courses.find((c: any) => c.id === courseId) || coursesResponse.courses[0]
       };
-      
-      setContentData(mockContentData);
-      
+
+      setContentData(realContentData);
+
       if (contentStats) {
         setContentStats({
           ...contentStats,
-          totalFiles: mockContentData.total_count
+          totalFiles: realContentData.total_count
         });
       }
     } catch (err: any) {
