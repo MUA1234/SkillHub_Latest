@@ -15,7 +15,6 @@ import {
   Users,
   DollarSign,
   Calendar,
-  TrendingUp,
   Video,
   MessageCircle,
   Star,
@@ -45,7 +44,6 @@ interface DashboardData {
     time: string;
     date: string;
     type: string;
-    thumbnail?: string;
   }>;
   recent_students: Array<{
     id: string;
@@ -63,7 +61,6 @@ interface DashboardData {
     rating: number;
     completion: number;
     revenue: string;
-    trend: string;
   }>;
 }
 
@@ -101,7 +98,7 @@ const TeacherHomePage = () => {
       const [dashboardStats, sessionsData, studentsData, coursesData] = await Promise.all([
         apiClient.getTeacherProfile().catch(() => null),
         apiClient.getTeacherSessions().catch(() => ({ sessions: [] })),
-        apiClient.getTeacherStudents().catch(() => ({ enrollments: [] })),
+        apiClient.getTeacherStudents().catch(() => ({ students: [] })),
         apiClient.getTeacherCourses().catch(() => ({ courses: [] }))
       ]);
 
@@ -117,33 +114,35 @@ const TeacherHomePage = () => {
       const upcomingSessions = sessions.slice(0, 3).map((session: any) => ({
         id: session.id,
         title: session.title,
-        students: session.enrolled_students || 0,
+        students: session.current_participants || 0,
         time: session.scheduled_start ? new Date(session.scheduled_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD',
         date: session.scheduled_start ? formatDate(session.scheduled_start) : 'TBD',
         type: session.session_type || 'Live Session',
-        thumbnail: 'https://images.pexels.com/photos/3861958/pexels-photo-3861958.jpeg?auto=compress&cs=tinysrgb&w=300'
       }));
 
-      const enrollments = studentsData?.enrollments || [];
-      const recentStudents = enrollments.slice(0, 3).map((enrollment: any) => ({
-        id: enrollment.student_id,
-        name: `${enrollment.student?.profile?.first_name || ''} ${enrollment.student?.profile?.last_name || ''}`.trim() || 'Student',
-        course: enrollment.course?.title || 'Course',
-        progress: enrollment.progress_percentage || 0,
-        lastActive: enrollment.last_accessed ? formatRelativeTime(enrollment.last_accessed) : 'N/A',
-        avatar: enrollment.student?.profile?.avatar_url || null,
-        status: enrollment.progress_percentage < 50 ? 'needs_attention' : 'active'
+      // GET /teachers/students returns a flat `students` array (one row per
+      // student, with a `courses` sub-array), not nested `enrollments` with
+      // `.student.profile`/`.course` — this page always showed "No students
+      // yet" regardless of real enrollments.
+      const students = studentsData?.students || [];
+      const recentStudents = students.slice(0, 3).map((student: any) => ({
+        id: student.id,
+        name: `${student.first_name || ''} ${student.last_name || ''}`.trim() || 'Student',
+        course: student.courses?.[0]?.title || 'Course',
+        progress: student.average_progress || 0,
+        lastActive: student.enrolled_at ? formatRelativeTime(student.enrolled_at) : 'N/A',
+        avatar: student.avatar_url || null,
+        status: student.average_progress < 50 ? 'needs_attention' : 'active'
       }));
 
       const courses = coursesData?.courses || [];
       const coursePerformance = courses.slice(0, 3).map((course: any) => ({
         id: course.id,
         title: course.title,
-        students: course.enrolled_students || 0,
+        students: course.total_students || 0,
         rating: course.average_rating || 0,
-        completion: course.completion_rate || 0,
-        revenue: formatCurrency(course.revenue || 0, { locale: language, compact: true }),
-        trend: 'up'
+        completion: Math.round(course.completion_rate || 0),
+        revenue: formatCurrency(course.total_revenue || 0, { locale: language, compact: true }),
       }));
 
       setDashboardData({
@@ -191,10 +190,10 @@ const TeacherHomePage = () => {
   };
 
   const teachingStats = dashboardData ? [
-    { label: 'Active Students', value: formatNumber(dashboardData.stats.total_students, { locale: language }), icon: Users, color: 'text-terracotta', change: '+12%' },
-    { label: 'Monthly Earnings', value: formatCurrency(dashboardData.stats.monthly_earnings, { locale: language, compact: true }), icon: DollarSign, color: 'text-forest', change: '+8%' },
-    { label: 'Course Rating', value: dashboardData.stats.average_rating.toFixed(1), icon: Star, color: 'text-mustard-500', change: '+0.1' },
-    { label: 'Hours Taught', value: (dashboardData.stats.total_teaching_hours || 0).toString(), icon: Clock, color: 'text-coral', change: '+15' },
+    { label: 'Active Students', value: formatNumber(dashboardData.stats.total_students, { locale: language }), icon: Users, color: 'text-terracotta' },
+    { label: 'Monthly Earnings', value: formatCurrency(dashboardData.stats.monthly_earnings, { locale: language, compact: true }), icon: DollarSign, color: 'text-forest' },
+    { label: 'Course Rating', value: dashboardData.stats.average_rating.toFixed(1), icon: Star, color: 'text-mustard-500' },
+    { label: 'Hours Taught', value: (dashboardData.stats.total_teaching_hours || 0).toString(), icon: Clock, color: 'text-coral' },
   ] : [];
 
   const upcomingClasses = dashboardData?.upcoming_sessions || [];
@@ -278,6 +277,7 @@ const TeacherHomePage = () => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                onClick={() => router.push('/teachers/content')}
                 className="clay-card bg-terracotta text-white px-6 py-3 flex items-center space-x-2 hover:bg-terracotta-500 transition-colors"
               >
                 <Plus className="w-5 h-5" />
@@ -306,9 +306,6 @@ const TeacherHomePage = () => {
                 >
                   <div className="flex items-center justify-between mb-4">
                     <Icon className={`w-8 h-8 ${stat.color}`} />
-                    <span className="text-sm font-medium text-forest">
-                      {stat.change}
-                    </span>
                   </div>
                   <div className="text-2xl font-bold text-espresso mb-1">
                     {stat.value}
@@ -332,7 +329,10 @@ const TeacherHomePage = () => {
               <div className="clay-card p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-bold text-espresso">Today's Schedule</h2>
-                  <button className="text-terracotta hover:text-terracotta-500 text-sm font-medium">
+                  <button
+                    onClick={() => router.push('/teachers/schedule')}
+                    className="text-terracotta hover:text-terracotta-500 text-sm font-medium"
+                  >
                     View Full Calendar
                   </button>
                 </div>
@@ -346,11 +346,9 @@ const TeacherHomePage = () => {
                         className="p-4 clay-card hover:shadow-lg transition-all border-l-4 border-terracotta"
                       >
                         <div className="flex items-center space-x-4">
-                          <img
-                            src={session.thumbnail}
-                            alt={session.title}
-                            className="w-16 h-16 clay-card object-cover"
-                          />
+                          <div className="w-16 h-16 clay-card bg-terracotta/15 flex items-center justify-center flex-shrink-0">
+                            <Video className="w-6 h-6 text-terracotta" />
+                          </div>
 
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-2">
@@ -372,6 +370,7 @@ const TeacherHomePage = () => {
                           <motion.button
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
+                            onClick={() => router.push('/teachers/live-sessions')}
                             className="bg-terracotta text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-terracotta-500 transition-colors flex items-center space-x-2"
                           >
                             <Video className="w-4 h-4" />
@@ -452,6 +451,7 @@ const TeacherHomePage = () => {
                           <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
+                            onClick={() => router.push('/teachers/students')}
                             className="clay-card p-2 text-terracotta hover:text-terracotta-500"
                           >
                             <MessageCircle className="w-4 h-4" />
@@ -481,7 +481,10 @@ const TeacherHomePage = () => {
             <div className="clay-card p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-espresso">Course Performance</h2>
-                <button className="text-terracotta hover:text-terracotta-500 text-sm font-medium">
+                <button
+                  onClick={() => router.push('/teachers/analytics')}
+                  className="text-terracotta hover:text-terracotta-500 text-sm font-medium"
+                >
                   View Analytics
                 </button>
               </div>
@@ -498,9 +501,6 @@ const TeacherHomePage = () => {
                         <h3 className="font-semibold text-espresso text-sm">
                           {course.title}
                         </h3>
-                        <TrendingUp className={`w-4 h-4 ${
-                          course.trend === 'up' ? 'text-forest' : 'text-espresso/45'
-                        }`} />
                       </div>
 
                       <div className="grid grid-cols-2 gap-4 text-sm">
@@ -556,6 +556,7 @@ const TeacherHomePage = () => {
                     key={action.name}
                     whileHover={{ y: -5, scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
+                    onClick={() => router.push(action.href)}
                     className={`${action.color} text-cream p-6 rounded-2xl text-center border-2 border-espresso shadow-sticker-sm hover:-translate-y-0.5 hover:shadow-sticker transition-transform`}
                   >
                     <Icon className="w-8 h-8 mx-auto mb-3" />

@@ -121,6 +121,20 @@ defmodule SkillHubWeb.TeacherController do
     with {:ok, tp} <- teacher_profile(conn) do
       courses = SQL.json_all("select to_jsonb(c) as row from public.courses c where c.teacher_id = $1::uuid order by c.created_at desc limit 100", [tp["id"]])
 
+      progress_by_course =
+        SQL.maps(
+          "select course_id::text course_id, coalesce(avg(progress_percentage), 0)::float avg_progress from public.course_enrollments where course_id in (select id from public.courses where teacher_id = $1::uuid) group by course_id",
+          [tp["id"]]
+        )
+        |> Map.new(&{&1.course_id, &1.avg_progress})
+
+      revenue_by_course =
+        SQL.maps(
+          "select reference_id::text course_id, coalesce(sum(amount) filter (where status = 'completed'), 0)::float total from public.payments where payment_type = 'course_enrollment' and reference_id in (select id from public.courses where teacher_id = $1::uuid) group by reference_id",
+          [tp["id"]]
+        )
+        |> Map.new(&{&1.course_id, &1.total})
+
       formatted =
         Enum.map(courses, fn c ->
           %{
@@ -128,7 +142,9 @@ defmodule SkillHubWeb.TeacherController do
             status: c["status"] || "draft", price: numf(c["price"]), thumbnail_url: c["thumbnail_url"],
             level: c["level"] || "beginner", duration_hours: c["duration_hours"] || 0, is_featured: c["is_featured"] || false,
             created_at: c["created_at"], updated_at: c["updated_at"], total_lessons: c["total_lessons"] || 0,
-            total_students: c["total_students"] || 0, average_rating: numf(c["average_rating"]), total_reviews: c["total_reviews"] || 0
+            total_students: c["total_students"] || 0, average_rating: numf(c["average_rating"]), total_reviews: c["total_reviews"] || 0,
+            completion_rate: Map.get(progress_by_course, c["id"], 0.0),
+            total_revenue: Map.get(revenue_by_course, c["id"], 0.0)
           }
         end)
 

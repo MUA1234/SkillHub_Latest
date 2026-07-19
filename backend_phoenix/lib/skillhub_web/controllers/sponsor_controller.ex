@@ -302,28 +302,63 @@ defmodule SkillHubWeb.SponsorController do
   def sponsorship_requests(conn, params) do
     with {:ok, _} <- require_role(conn, "sponsor") do
       status_filter = params["status_filter"] || "all"
-      {clause, args} = if status_filter == "all", do: {"", []}, else: {" and sr.status::text = $1", [status_filter]}
+      category_filter = params["category_filter"] || "all"
+      search = String.trim(params["search"] || "")
+
+      {clauses, args} = {[], []}
+
+      {clauses, args} =
+        if status_filter == "all" do
+          {clauses, args}
+        else
+          {clauses ++ ["sr.status::text = $#{length(args) + 1}"], args ++ [status_filter]}
+        end
+
+      {clauses, args} =
+        if category_filter == "all" do
+          {clauses, args}
+        else
+          {clauses ++ ["coalesce(tp.specializations[1], 'General') = $#{length(args) + 1}"], args ++ [category_filter]}
+        end
+
+      {clauses, args} =
+        if search == "" do
+          {clauses, args}
+        else
+          i = length(args) + 1
+          pattern = "%#{search}%"
+          {clauses ++ ["(sr.title ilike $#{i} or sr.description ilike $#{i} or coalesce(up.first_name, '') || ' ' || coalesce(up.last_name, '') ilike $#{i})"], args ++ [pattern]}
+        end
+
+      where = if clauses == [], do: "", else: " and " <> Enum.join(clauses, " and ")
 
       rows =
         SQL.maps(
           """
-          select sr.id::text, sr.title, sr.description, sr.amount_requested::float, sr.students_impacted,
+          select sr.id::text, sr.teacher_id::text, sr.title, sr.description, sr.amount_requested::float, sr.students_impacted,
             sr.status::text status, sr.submitted_at, sr.reviewed_at, sr.reviewer_notes,
             nullif(trim(coalesce(up.first_name, '') || ' ' || coalesce(up.last_name, '')), '') teacher_name,
             u.email teacher_email, up.phone teacher_phone, tp.title teacher_title,
             tp.experience_years, tp.average_rating, tp.specializations,
-            'Education' category,
+            coalesce(tp.specializations[1], 'General') category,
             case when sr.amount_requested > 200000 then 'high' when sr.amount_requested > 100000 then 'medium' else 'low' end urgency
           from public.sponsorship_requests sr
           join public.users u on sr.teacher_id = u.id
           left join public.user_profiles up on u.id = up.user_id
           left join public.teacher_profiles tp on u.id = tp.user_id
-          where 1=1#{clause} order by sr.submitted_at desc nulls last limit 100
+          where 1=1#{where} order by sr.submitted_at desc nulls last limit 100
           """,
           args
         )
 
-      json(conn, %{success: true, data: %{requests: rows}})
+      summary = %{
+        totalRequests: length(rows),
+        pendingRequests: Enum.count(rows, &(&1.status == "pending")),
+        totalStudents: Enum.reduce(rows, 0, &(&2 + (&1.students_impacted || 0))),
+        totalAmount: Enum.reduce(rows, 0.0, &(&2 + (&1.amount_requested || 0.0)))
+      }
+
+      json(conn, %{success: true, data: %{requests: rows, summary: summary}})
     end
   end
 

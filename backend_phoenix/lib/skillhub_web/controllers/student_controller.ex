@@ -491,7 +491,16 @@ defmodule SkillHubWeb.StudentController do
         |> Enum.filter(&lesson_matches?(&1, want_cap, want_tr, want_ad, disability_type, subject, my_types))
         |> Enum.map(&Map.drop(&1, [:_target, :_accessible_all, :_subject, :_cap, :_tr, :_ad]))
 
-      json(conn, %{success: true, data: %{lessons: Enum.slice(rows, offset, limit), pagination: %{total: length(rows), page: page, limit: limit}}})
+      total = length(rows)
+
+      json(conn, %{
+        success: true,
+        data: %{
+          lessons: Enum.slice(rows, offset, limit),
+          student_disability_types: my_types,
+          pagination: %{total: total, page: page, limit: limit, total_pages: max(1, div(total + limit - 1, limit))}
+        }
+      })
     end
   end
 
@@ -1123,12 +1132,15 @@ defmodule SkillHubWeb.StudentController do
       search = (params["search"] || "") |> String.downcase()
       category = params["category"] || ""
       event_type = params["event_type"] || ""
+      location_filter = params["location"] || "all"
+      price_filter = params["price_filter"] || "all"
 
       rows =
         SQL.maps(
           """
           select to_jsonb(e) row,
             nullif(trim(coalesce(up.first_name,'') || ' ' || coalesce(up.last_name,'')), '') organizer_name,
+            up.avatar_url organizer_avatar,
             exists(select 1 from public.event_registrations r where r.event_id = e.id and r.user_id = $1::uuid) is_registered,
             exists(select 1 from public.wishlists b where b.event_id = e.id and b.user_id = $1::uuid and b.item_type = 'event') is_bookmarked
           from public.events e left join public.user_profiles up on up.user_id = e.organizer_id
@@ -1140,7 +1152,11 @@ defmodule SkillHubWeb.StudentController do
         |> Enum.filter(fn ev ->
           (search == "" or String.contains?(String.downcase(ev.title || ""), search) or String.contains?(String.downcase(ev.description || ""), search)) and
             (category == "" or ev.category == category) and
-            (event_type == "" or ev.event_type == event_type)
+            (event_type == "" or ev.event_type == event_type) and
+            (location_filter == "all" or
+               (location_filter == "online" and ev.is_online) or
+               (location_filter != "online" and not ev.is_online and String.downcase(ev.location || "") =~ String.downcase(location_filter))) and
+            (price_filter == "all" or (price_filter == "free" and ev.is_free) or (price_filter == "paid" and not ev.is_free))
         end)
 
       total = SQL.scalar("select count(*)::int from public.events", [], 0)
@@ -1209,7 +1225,10 @@ defmodule SkillHubWeb.StudentController do
       category: e["category"], start_date: e["start_date"], end_date: e["end_date"], location: e["location"],
       is_online: e["is_online"] || false, meeting_link: e["meeting_link"], max_attendees: e["max_attendees"],
       current_attendees: e["current_attendees"] || 0, is_free: numf(e["price"]) == 0.0, price: numf(e["price"]),
-      image_url: e["image_url"], organizer_name: r.organizer_name || "Unknown",
+      original_price: if(e["original_price"], do: numf(e["original_price"]), else: nil),
+      image_url: e["image_url"], organizer_name: r.organizer_name || "Unknown", organizer_avatar: r.organizer_avatar,
+      tags: e["tags"] || [], level: e["level"], languages: e["languages"] || [],
+      has_certificate: e["has_certificate"] || false, sponsor: e["sponsor"], is_featured: e["is_featured"] || false,
       is_registered: r.is_registered, is_bookmarked: r.is_bookmarked
     }
   end

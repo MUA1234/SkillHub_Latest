@@ -78,7 +78,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const fetchUserLanguagePreference = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
 
       if (token) {
         const response = await fetch(
@@ -133,7 +133,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         document.documentElement.dir = langInfo.direction;
       }
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
 
       if (token) {
         const response = await fetch(

@@ -213,7 +213,7 @@ export default function PreRecordedLessonsPage() {
   const fetchLessons = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('Not authenticated');
       }

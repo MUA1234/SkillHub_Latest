@@ -7,22 +7,20 @@ import DashboardSidebar from '@/components/ui/dashboard-sidebar';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { getCurrentUser, isAuthenticated, apiClient } from '@/lib/api';
+import { formatCurrency } from '@/lib/format';
+import { useTranslation } from '@/hooks/use-translation';
 import { useRouter } from 'next/navigation';
-import { 
-  Calendar, 
-  MapPin, 
-  Clock, 
-  Users, 
+import {
+  Calendar,
+  MapPin,
+  Clock,
+  Users,
   DollarSign,
   Search,
   Filter,
   Video,
-  Star,
-  Heart,
   Share,
   Bookmark,
-  Eye,
-  Accessibility,
   Globe,
   Award,
   Zap,
@@ -31,12 +29,14 @@ import {
 
 const StudentEventsPage = () => {
   const router = useRouter();
+  const { language } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedLocation, setSelectedLocation] = useState('all');
   const [selectedPrice, setSelectedPrice] = useState('all');
-  const [accessibilityFilter, setAccessibilityFilter] = useState(false);
+  const [viewFilter, setViewFilter] = useState<'all' | 'registered' | 'bookmarked'>('all');
   const [expandedEvents, setExpandedEvents] = useState<string[]>([]);
+  const [brokenImageIds, setBrokenImageIds] = useState<string[]>([]);
 
   const [events, setEvents] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -81,7 +81,7 @@ const StudentEventsPage = () => {
 
       return () => clearTimeout(timeoutId);
     }
-  }, [searchQuery, selectedCategory, selectedLocation, selectedPrice, accessibilityFilter, categories.length]);
+  }, [searchQuery, selectedCategory, selectedLocation, selectedPrice, categories.length]);
 
   const loadEventData = async () => {
     try {
@@ -95,7 +95,6 @@ const StudentEventsPage = () => {
           category: selectedCategory,
           location: selectedLocation,
           price_filter: selectedPrice,
-          accessibility_only: accessibilityFilter,
           page: 1,
           limit: 20
         })
@@ -131,7 +130,6 @@ const StudentEventsPage = () => {
         category: selectedCategory,
         location: selectedLocation,
         price_filter: selectedPrice,
-        accessibility_only: accessibilityFilter,
         page: 1,
         limit: 20
       });
@@ -213,6 +211,27 @@ const StudentEventsPage = () => {
     }
   };
 
+  const filteredEvents = (Array.isArray(events) ? events : []).filter((event) => {
+    if (viewFilter === 'registered') return event.is_registered;
+    if (viewFilter === 'bookmarked') return event.is_bookmarked;
+    return true;
+  });
+
+  const formatEventDate = (startDate: string) => {
+    if (!startDate) return 'TBD';
+    return new Date(startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatEventDuration = (startDate: string, endDate: string) => {
+    if (!startDate || !endDate) return null;
+    const ms = new Date(endDate).getTime() - new Date(startDate).getTime();
+    if (!Number.isFinite(ms) || ms <= 0) return null;
+    const hours = ms / (1000 * 60 * 60);
+    if (hours < 1) return `${Math.round(ms / (1000 * 60))} min`;
+    if (hours < 24) return `${Math.round(hours * 10) / 10} hr${hours >= 2 ? 's' : ''}`;
+    return `${Math.round(hours / 24)} day${hours >= 48 ? 's' : ''}`;
+  };
+
   const getLevelColor = (level: string) => {
     switch (level) {
       case 'Beginner': return 'text-forest bg-forest/15';
@@ -265,7 +284,7 @@ const StudentEventsPage = () => {
             </div>
 
             {}
-            <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
               {}
               <div>
                 <label className="block text-sm font-medium text-espresso mb-2">Category</label>
@@ -314,36 +333,21 @@ const StudentEventsPage = () => {
 
               {}
               <div>
-                <label className="block text-sm font-medium text-espresso mb-2">Accessibility</label>
-                <div className="flex items-center space-x-2 mt-3">
-                  <input
-                    type="checkbox"
-                    id="accessibility"
-                    checked={accessibilityFilter}
-                    onChange={(e) => setAccessibilityFilter(e.target.checked)}
-                    className="w-4 h-4 text-forest rounded focus:ring-green-500"
-                  />
-                  <label htmlFor="accessibility" className="text-sm text-espresso">
-                    Accessible Events Only
-                  </label>
-                </div>
-              </div>
-
-              {}
-              <div>
                 <label className="block text-sm font-medium text-espresso mb-2">Quick Actions</label>
                 <div className="flex space-x-2">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    className="clay-card px-3 py-2 text-sm text-espresso/70 hover:text-espresso"
+                    onClick={() => setViewFilter(viewFilter === 'registered' ? 'all' : 'registered')}
+                    className={`clay-card px-3 py-2 text-sm transition-colors ${viewFilter === 'registered' ? 'text-forest font-semibold' : 'text-espresso/70 hover:text-espresso'}`}
                   >
                     My Events
                   </motion.button>
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    className="clay-card px-3 py-2 text-sm text-espresso/70 hover:text-espresso"
+                    onClick={() => setViewFilter(viewFilter === 'bookmarked' ? 'all' : 'bookmarked')}
+                    className={`clay-card px-3 py-2 text-sm transition-colors ${viewFilter === 'bookmarked' ? 'text-mustard-500 font-semibold' : 'text-espresso/70 hover:text-espresso'}`}
                   >
                     Bookmarked
                   </motion.button>
@@ -376,8 +380,9 @@ const StudentEventsPage = () => {
               </div>
             ) : (
             <p className="text-espresso/70">
-                Found {pagination.total || events.length} events
+                Found {filteredEvents.length} event{filteredEvents.length === 1 ? '' : 's'}
               {searchQuery && ` for "${searchQuery}"`}
+              {viewFilter !== 'all' && ` (${viewFilter})`}
             </p>
             )}
           </motion.div>
@@ -389,7 +394,7 @@ const StudentEventsPage = () => {
             transition={{ delay: 0.3 }}
             className="grid lg:grid-cols-2 gap-6"
           >
-            {(Array.isArray(events) ? events : []).map((event, index) => (
+            {filteredEvents.map((event, index) => (
               <motion.div
                 key={event.id}
                 initial={{ opacity: 0, y: 30 }}
@@ -399,22 +404,29 @@ const StudentEventsPage = () => {
                 className="clay-card clay-card-hover overflow-hidden flex flex-col h-full"
               >
                 {}
-                <div className="relative h-48 flex-shrink-0">
-                  <img 
-                    src={event.image}
-                    alt={event.title}
-                    className="w-full h-full object-cover"
-                  />
-                  
+                <div className="relative h-48 flex-shrink-0 bg-terracotta/10">
+                  {event.image_url && !brokenImageIds.includes(event.id) ? (
+                    <img
+                      src={event.image_url}
+                      alt={event.title}
+                      onError={() => setBrokenImageIds((prev) => [...prev, event.id])}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Calendar className="w-12 h-12 text-terracotta/40" />
+                    </div>
+                  )}
+
                   {}
                   <div className="absolute top-4 left-4 flex flex-col space-y-2">
                     <span className="px-3 py-1 bg-terracotta text-white rounded-full text-xs font-medium inline-flex items-center h-6">
-                      {event.category.toUpperCase()}
+                      {(event.category || '').toUpperCase()}
                     </span>
-                    {event.accessibility && (
-                      <span className="px-3 py-1 bg-forest text-white rounded-full text-xs font-medium inline-flex items-center h-6 space-x-1">
-                        <Accessibility className="w-3 h-3" />
-                        <span>Accessible</span>
+                    {event.is_featured && (
+                      <span className="px-3 py-1 bg-mustard-500 text-white rounded-full text-xs font-medium inline-flex items-center h-6 space-x-1">
+                        <Zap className="w-3 h-3" />
+                        <span>Featured</span>
                       </span>
                     )}
                   </div>
@@ -438,6 +450,15 @@ const StudentEventsPage = () => {
                     <motion.button
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
+                      onClick={async () => {
+                        const url = `${window.location.origin}/students/events?event=${event.id}`;
+                        if (navigator.share) {
+                          try { await navigator.share({ title: event.title, url }); } catch {}
+                        } else {
+                          await navigator.clipboard.writeText(url);
+                          alert('Event link copied to clipboard');
+                        }
+                      }}
                       className="clay-card w-8 h-8 flex items-center justify-center text-espresso/70 hover:text-terracotta transition-colors"
                       title="Share event"
                     >
@@ -448,15 +469,15 @@ const StudentEventsPage = () => {
                   {}
                   <div className="absolute bottom-4 right-4">
                     <div className="clay-card bg-cream-50 bg-opacity-90 px-3 py-1 h-6 flex items-center">
-                      {event.originalPrice && (
+                      {event.original_price != null && event.original_price > event.price && (
                         <span className="text-xs text-espresso/55 line-through mr-2">
-                          {event.originalPrice}
+                          {formatCurrency(event.original_price, { locale: language, compact: true })}
                         </span>
                       )}
                       <span className={`text-sm font-bold ${
-                        event.price === 'Free' ? 'text-forest' : 'text-terracotta'
+                        event.is_free ? 'text-forest' : 'text-terracotta'
                       }`}>
-                        {event.price}
+                        {event.is_free ? 'Free' : formatCurrency(event.price, { locale: language, compact: true })}
                       </span>
                     </div>
                   </div>
@@ -470,25 +491,22 @@ const StudentEventsPage = () => {
                         {event.title}
                       </h3>
                       <div className="flex items-center space-x-2 h-8">
-                        <img 
-                          src={event.organizerAvatar}
-                          alt={event.organizer}
+                        <img
+                          src={event.organizer_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(event.organizer_name || 'Organizer')}&background=random`}
+                          alt={event.organizer_name}
                           className="w-8 h-8 clay-card object-cover rounded-full"
                         />
-                        <span className="text-sm text-espresso/70">{event.organizer}</span>
+                        <span className="text-sm text-espresso/70">{event.organizer_name}</span>
                       </div>
                     </div>
-                    
-                    <div className="text-right ml-4 flex flex-col items-end">
-                      <div className="flex items-center space-x-1 mb-2 h-6">
-                        <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                        <span className="text-sm font-medium">{event.rating}</span>
-                        <span className="text-xs text-espresso/55">({event.reviews})</span>
+
+                    {event.level && (
+                      <div className="text-right ml-4 flex flex-col items-end">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium h-6 inline-flex items-center justify-center ${getLevelColor(event.level)}`}>
+                          {event.level}
+                        </span>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium h-6 inline-flex items-center justify-center ${getLevelColor(event.level)}`}>
-                        {event.level}
-                      </span>
-                    </div>
+                    )}
                   </div>
 
                   {}
@@ -497,17 +515,17 @@ const StudentEventsPage = () => {
                       <div className="w-8 h-8 clay-card rounded-full flex items-center justify-center">
                         <Calendar className="w-4 h-4 text-espresso/70" />
                       </div>
-                      <span className="text-sm text-espresso/70">{event.date}</span>
+                      <span className="text-sm text-espresso/70">{formatEventDate(event.start_date)}</span>
                     </div>
                     <div className="flex items-center space-x-2 h-8">
                       <div className="w-8 h-8 clay-card rounded-full flex items-center justify-center">
-                        {event.location === 'Online' ? (
+                        {event.is_online ? (
                           <Video className="w-4 h-4 text-espresso/70" />
                         ) : (
                           <MapPin className="w-4 h-4 text-espresso/70" />
                         )}
                       </div>
-                      <span className="text-sm text-espresso/70">{event.location}</span>
+                      <span className="text-sm text-espresso/70">{event.is_online ? 'Online' : (event.location || 'TBD')}</span>
                     </div>
                   </div>
 
@@ -525,35 +543,39 @@ const StudentEventsPage = () => {
                     <div className="space-y-6">
                       {}
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="flex items-center space-x-2 h-8">
-                          <div className="w-8 h-8 clay-card rounded-full flex items-center justify-center">
-                            <Clock className="w-4 h-4 text-espresso/70" />
+                        {formatEventDuration(event.start_date, event.end_date) && (
+                          <div className="flex items-center space-x-2 h-8">
+                            <div className="w-8 h-8 clay-card rounded-full flex items-center justify-center">
+                              <Clock className="w-4 h-4 text-espresso/70" />
+                            </div>
+                            <span className="text-sm text-espresso/70">{formatEventDuration(event.start_date, event.end_date)}</span>
                           </div>
-                          <span className="text-sm text-espresso/70">{event.duration}</span>
-                        </div>
+                        )}
                         <div className="flex items-center space-x-2 h-8">
                           <div className="w-8 h-8 clay-card rounded-full flex items-center justify-center">
                             <Users className="w-4 h-4 text-espresso/70" />
                           </div>
-                          <span className="text-sm text-espresso/70">{event.attendees}/{event.maxAttendees}</span>
+                          <span className="text-sm text-espresso/70">{event.current_attendees}/{event.max_attendees || 'N/A'}</span>
                         </div>
                       </div>
 
                       {}
-                      <div className="flex flex-wrap gap-2">
-                        {(Array.isArray(event.tags) ? event.tags : []).slice(0, 4).map((tag: string) => (
-                          <span
-                            key={tag}
-                            className="clay-card px-3 py-1 text-xs text-espresso/70 h-6 inline-flex items-center"
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
+                      {(Array.isArray(event.tags) ? event.tags : []).length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {event.tags.slice(0, 4).map((tag: string) => (
+                            <span
+                              key={tag}
+                              className="clay-card px-3 py-1 text-xs text-espresso/70 h-6 inline-flex items-center"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
 
                       {}
                       <div className="grid grid-cols-3 gap-4">
-                        {event.certificate && (
+                        {event.has_certificate && (
                           <div className="flex items-center space-x-2 h-8">
                             <div className="w-8 h-8 clay-card rounded-full flex items-center justify-center">
                               <Award className="w-4 h-4 text-espresso/70" />
@@ -561,12 +583,14 @@ const StudentEventsPage = () => {
                             <span className="text-xs text-espresso/55">Certificate</span>
                           </div>
                         )}
-                        <div className="flex items-center space-x-2 h-8">
-                          <div className="w-8 h-8 clay-card rounded-full flex items-center justify-center">
-                            <Globe className="w-4 h-4 text-espresso/70" />
+                        {(Array.isArray(event.languages) ? event.languages : []).length > 0 && (
+                          <div className="flex items-center space-x-2 h-8">
+                            <div className="w-8 h-8 clay-card rounded-full flex items-center justify-center">
+                              <Globe className="w-4 h-4 text-espresso/70" />
+                            </div>
+                            <span className="text-xs text-espresso/55">{event.languages.join(', ')}</span>
                           </div>
-                          <span className="text-xs text-espresso/55">{(Array.isArray(event.languages) ? event.languages : []).join(', ')}</span>
-                        </div>
+                        )}
                         {event.sponsor && (
                           <div className="flex items-center space-x-2 h-8">
                             <div className="w-8 h-8 clay-card rounded-full flex items-center justify-center">
@@ -625,22 +649,6 @@ const StudentEventsPage = () => {
                         <span>{event.is_registered ? 'Registered' : 'Register Now'}</span>
                       )}
                     </motion.button>
-                    
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      className="clay-card p-3 text-espresso/70 hover:text-coral transition-colors"
-                    >
-                      <Heart className="w-4 h-4" />
-                    </motion.button>
-                    
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      className="clay-card p-3 text-espresso/70 hover:text-espresso transition-colors"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </motion.button>
                   </div>
                 </div>
               </motion.div>
@@ -648,7 +656,7 @@ const StudentEventsPage = () => {
           </motion.div>
 
           {}
-          {!isLoading && events.length === 0 && (
+          {!isLoading && filteredEvents.length === 0 && (
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}

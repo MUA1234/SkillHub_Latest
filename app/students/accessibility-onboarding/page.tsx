@@ -126,7 +126,7 @@ export default function AccessibilityOnboarding() {
         onboarding_completed: true,
       };
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -168,7 +168,7 @@ export default function AccessibilityOnboarding() {
 
   const applyAccessibilityPresets = async (disabilityType: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       
       const presetResponse = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/v1/accessibility/presets?disability_type=${disabilityType}`,
@@ -196,7 +196,7 @@ export default function AccessibilityOnboarding() {
 
   const handleSkipOnboarding = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       
       if (token) {
         await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/accessibility/disability-profile`, {

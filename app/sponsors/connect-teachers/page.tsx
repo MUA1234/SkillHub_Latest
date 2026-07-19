@@ -14,7 +14,6 @@ import {
   Users,
   Mail,
   Phone,
-  MapPin,
   Star,
   Award,
   BookOpen,
@@ -30,13 +29,14 @@ import {
 
 interface SponsorshipRequest {
   id: string;
+  teacherId: string;
   teacherName: string;
   teacherEmail: string;
   teacherPhone: string;
-  school: string;
-  location: string;
+  teacherTitle: string;
+  specializations: string[];
   rating: number;
-  experience: string;
+  experienceYears: number;
   projectTitle: string;
   projectDescription: string;
   amountRequested: number;
@@ -45,6 +45,8 @@ interface SponsorshipRequest {
   status: 'pending' | 'approved' | 'rejected' | 'under_review';
   category: string;
   urgency: 'low' | 'medium' | 'high';
+  reviewedAt: string | null;
+  reviewerNotes: string;
 }
 
 const SponsorConnectTeachersPage = () => {
@@ -57,6 +59,8 @@ const SponsorConnectTeachersPage = () => {
   const [error, setError] = useState('');
   
   const [sponsorshipRequests, setSponsorshipRequests] = useState<SponsorshipRequest[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [summary, setSummary] = useState({
     totalRequests: 0,
     pendingRequests: 0,
@@ -106,7 +110,7 @@ const SponsorConnectTeachersPage = () => {
         limit: 50
       });
 
-      let requestsData: SponsorshipRequest[] = [];
+      let rawRequests: any[] = [];
       let summaryData = {
         totalRequests: 0,
         pendingRequests: 0,
@@ -115,16 +119,40 @@ const SponsorConnectTeachersPage = () => {
       };
 
       if (result?.success && result?.data) {
-        requestsData = Array.isArray(result.data?.requests) ? result.data.requests : [];
+        rawRequests = Array.isArray(result.data?.requests) ? result.data.requests : [];
         summaryData = result.data?.summary || summaryData;
       } else if (Array.isArray(result?.requests)) {
-        requestsData = result.requests;
+        rawRequests = result.requests;
         summaryData = result.summary || summaryData;
       } else if (Array.isArray(result?.data)) {
-        requestsData = result.data;
+        rawRequests = result.data;
       } else if (Array.isArray(result)) {
-        requestsData = result;
+        rawRequests = result;
       }
+
+      // Backend returns snake_case fields from a raw SQL join — map to the
+      // camelCase shape this page renders.
+      const requestsData: SponsorshipRequest[] = rawRequests.map((r: any) => ({
+        id: r.id,
+        teacherId: r.teacher_id,
+        teacherName: r.teacher_name || 'Unknown Teacher',
+        teacherEmail: r.teacher_email || '',
+        teacherPhone: r.teacher_phone || 'N/A',
+        teacherTitle: r.teacher_title || 'Educator',
+        specializations: Array.isArray(r.specializations) ? r.specializations : [],
+        rating: r.average_rating || 0,
+        experienceYears: r.experience_years || 0,
+        projectTitle: r.title || 'Untitled Request',
+        projectDescription: r.description || '',
+        amountRequested: r.amount_requested || 0,
+        studentsImpacted: r.students_impacted || 0,
+        submissionDate: r.submitted_at,
+        status: r.status,
+        category: r.category || 'General',
+        urgency: r.urgency || 'low',
+        reviewedAt: r.reviewed_at || null,
+        reviewerNotes: r.reviewer_notes || ''
+      }));
 
       if (requestsData.length > 0 && summaryData.totalRequests === 0) {
         summaryData = {
@@ -137,6 +165,13 @@ const SponsorConnectTeachersPage = () => {
 
       setSponsorshipRequests(requestsData);
       setSummary(summaryData);
+
+      // Category options come from teachers' real specializations, so build
+      // the filter list from whatever the unfiltered load returned.
+      if (statusFilter === 'all' && categoryFilter === 'all' && searchQuery === '') {
+        const categories = Array.from(new Set(requestsData.map((r) => r.category).filter(Boolean)));
+        setAvailableCategories(categories.sort());
+      }
 
     } catch (err: any) {
       console.error('Error loading sponsorship requests:', err);
@@ -350,10 +385,9 @@ const SponsorConnectTeachersPage = () => {
                   className="px-4 py-2 bg-cream-100 border-2 border-espresso/15 rounded-xl text-espresso placeholder:text-espresso/45 focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta outline-none transition"
                 >
                   <option value="all">All Categories</option>
-                  <option value="Equipment">Equipment</option>
-                  <option value="Technology">Technology</option>
-                  <option value="Arts">Arts</option>
-                  <option value="Sports">Sports</option>
+                  {availableCategories.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -405,12 +439,18 @@ const SponsorConnectTeachersPage = () => {
                         </div>
                         <div className="flex items-center text-espresso/70">
                           <BookOpen className="w-4 h-4 text-espresso/45 mr-2" />
-                          {request.school}
+                          {request.teacherTitle} • {request.experienceYears} yrs experience
                         </div>
-                        <div className="flex items-center text-espresso/70">
-                          <MapPin className="w-4 h-4 text-espresso/45 mr-2" />
-                          {request.location}
-                        </div>
+                        {request.specializations.length > 0 && (
+                          <div className="flex items-center flex-wrap gap-1 text-espresso/70">
+                            <Award className="w-4 h-4 text-espresso/45 mr-1" />
+                            {request.specializations.map((s) => (
+                              <span key={s} className="px-2 py-0.5 text-xs bg-terracotta/10 text-terracotta rounded-full">
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -440,17 +480,44 @@ const SponsorConnectTeachersPage = () => {
                     </div>
                   </div>
 
+                  {expandedId === request.id && (
+                    <div className="mt-4 pt-4 border-t border-espresso/15 text-sm space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-espresso/70">Teacher ID:</span>
+                        <span className="font-mono text-xs text-espresso">{request.teacherId}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-espresso/70">Reviewed:</span>
+                        <span className="font-medium text-espresso">
+                          {request.reviewedAt ? new Date(request.reviewedAt).toLocaleDateString() : 'Not yet reviewed'}
+                        </span>
+                      </div>
+                      {request.reviewerNotes && (
+                        <div>
+                          <span className="text-espresso/70">Reviewer Notes:</span>
+                          <p className="text-espresso mt-1">{request.reviewerNotes}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {}
                   <div className="flex items-center justify-between pt-4 mt-4 border-t border-espresso/15">
                     <div className="flex space-x-3">
-                      <button className="flex items-center px-3 py-2 text-sm text-terracotta hover:text-terracotta-500 hover:bg-terracotta/10 rounded-lg">
+                      <button
+                        onClick={() => setExpandedId(expandedId === request.id ? null : request.id)}
+                        className="flex items-center px-3 py-2 text-sm text-terracotta hover:text-terracotta-500 hover:bg-terracotta/10 rounded-lg"
+                      >
                         <Eye className="w-4 h-4 mr-1" />
-                        View Details
+                        {expandedId === request.id ? 'Hide Details' : 'View Details'}
                       </button>
-                      <button className="flex items-center px-3 py-2 text-sm text-forest hover:text-forest-500 hover:bg-forest/10 rounded-lg">
+                      <a
+                        href={`mailto:${request.teacherEmail}?subject=${encodeURIComponent('Regarding your sponsorship request: ' + request.projectTitle)}`}
+                        className="flex items-center px-3 py-2 text-sm text-forest hover:text-forest-500 hover:bg-forest/10 rounded-lg"
+                      >
                         <MessageSquare className="w-4 h-4 mr-1" />
                         Contact Teacher
-                      </button>
+                      </a>
                     </div>
                     {request.status === 'pending' && (
                       <div className="flex space-x-3">

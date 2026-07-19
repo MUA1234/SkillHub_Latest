@@ -1903,7 +1903,6 @@ class APIClient {
       category?: string;
       location?: string;
       price_filter?: string;
-      accessibility_only?: boolean;
       page?: number;
       limit?: number;
     } = {}
@@ -1918,8 +1917,6 @@ class APIClient {
       searchParams.append("location", params.location);
     if (params.price_filter && params.price_filter !== "all")
       searchParams.append("price_filter", params.price_filter);
-    if (params.accessibility_only === true)
-      searchParams.append("accessibility_only", "true");
     if (params.page && params.page > 0)
       searchParams.append("page", params.page.toString());
     if (params.limit && params.limit > 0)
