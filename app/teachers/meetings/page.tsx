@@ -264,6 +264,28 @@ const TeacherMeetingsPage = () => {
     }
   };
 
+  const handleEndMeeting = async (meeting: Meeting) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/meetings/rooms/${meeting.id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ new_status: 'ended' })
+      });
+
+      if (response.ok) {
+        fetchMeetings();
+      } else {
+        throw new Error('Failed to end meeting');
+      }
+    } catch (err: any) {
+      console.error('Error ending meeting:', err);
+      alert(`Failed to end meeting: ${err.message}`);
+    }
+  };
+
   const handleDeleteMeeting = async (meeting: Meeting) => {
     if (!confirm(`Are you sure you want to delete "${meeting.title}"?`)) {
       return;
@@ -456,7 +478,7 @@ const TeacherMeetingsPage = () => {
                                 Join Live
                               </button>
                               <button
-                                onClick={() => handleStartMeeting(meeting)}
+                                onClick={() => handleEndMeeting(meeting)}
                                 className="flex items-center px-4 py-2 bg-espresso/85 text-white rounded-lg hover:bg-espresso transition-colors"
                               >
                                 <Square className="w-4 h-4 mr-2" />

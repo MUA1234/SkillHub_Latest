@@ -46,6 +46,7 @@ defmodule SkillHubWeb.SponsorController do
       prev_roi = if prev_total > 0, do: Float.round(prev.students * 1000 / prev_total * 100, 1), else: 0.0
 
       events_hosted = event_summary(profile["company_name"], user_id).totalEvents
+      partnerships = SQL.scalar("select count(*)::int from public.partnerships where sponsor_id = $1::uuid and status = 'active'", [sid], 0)
 
       json(conn, %{
         success: true,
@@ -55,7 +56,7 @@ defmodule SkillHubWeb.SponsorController do
             total_budget: total, total_budget_change: pct_change(total, prev_total),
             students_reached: students, students_reached_change: pct_change(students, prev.students),
             events_hosted: events_hosted,
-            teacher_partnerships: 0,
+            teacher_partnerships: partnerships,
             roi: roi, roi_change: pct_change(roi, prev_roi)
           },
           sponsor: %{

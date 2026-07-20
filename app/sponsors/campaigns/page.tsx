@@ -364,6 +364,26 @@ const SponsorCampaignsPage = () => {
     setShowDeleteModal(true);
   };
 
+  const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null);
+
+  const downloadCampaignsCsv = () => {
+    const header = ['Title', 'Status', 'Budget', 'Students Reached', 'Completion %', 'Start Date', 'End Date'];
+    const rows = campaigns.map((c) => [
+      c.title, c.status, String(c.budget), String(c.studentsReached || 0),
+      String(c.completionPercentage || 0), c.startDate || '', c.endDate || '',
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `campaigns-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
 
   const campaignStats = [
     {
@@ -674,6 +694,7 @@ const SponsorCampaignsPage = () => {
                     </div>
                     <div className="flex space-x-2">
                       <button
+                        onClick={() => setExpandedCampaignId(expandedCampaignId === campaign.id ? null : campaign.id)}
                         className="p-2 text-espresso/45 hover:text-espresso/70 transition-colors"
                         title="View Campaign"
                       >
@@ -695,6 +716,22 @@ const SponsorCampaignsPage = () => {
                       </button>
                     </div>
                   </div>
+
+                  {expandedCampaignId === campaign.id && (
+                    <div className="border-t pt-4 mb-4 text-sm space-y-2">
+                      {campaign.image && (
+                        <img src={campaign.image} alt={campaign.title} className="w-full max-w-xs rounded-lg border border-espresso/15 mb-2" />
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-espresso/55">Created:</span>
+                        <span className="font-medium text-espresso">{campaign.created_at ? new Date(campaign.created_at).toLocaleDateString() : 'Unknown'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-espresso/55">Campaign ID:</span>
+                        <span className="font-mono text-xs text-espresso">{campaign.id}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="border-t pt-4">
                     <div className="flex items-center justify-between">
@@ -738,7 +775,10 @@ const SponsorCampaignsPage = () => {
                             Launch Campaign
                           </button>
                         )}
-                        <button className="flex items-center px-3 py-2 bg-cream-100 text-espresso rounded-lg hover:bg-cream-300 transition-colors">
+                        <button
+                          onClick={() => router.push('/sponsors/analytics')}
+                          className="flex items-center px-3 py-2 bg-cream-100 text-espresso rounded-lg hover:bg-cream-300 transition-colors"
+                        >
                           <BarChart3 className="w-4 h-4 mr-2" />
                           View Analytics
                         </button>
@@ -751,7 +791,10 @@ const SponsorCampaignsPage = () => {
                           <Edit className="w-4 h-4 mr-2" />
                           Edit
                         </button>
-                        <button className="flex items-center px-3 py-2 bg-cream-100 text-espresso rounded-lg hover:bg-cream-300 transition-colors">
+                        <button
+                          onClick={downloadCampaignsCsv}
+                          className="flex items-center px-3 py-2 bg-cream-100 text-espresso rounded-lg hover:bg-cream-300 transition-colors"
+                        >
                           <Download className="w-4 h-4 mr-2" />
                           Report
                         </button>
@@ -773,7 +816,10 @@ const SponsorCampaignsPage = () => {
                   Get started by creating your first educational sponsorship
                   campaign
                 </p>
-                <button className="inline-flex items-center inline-flex items-center gap-2 px-4 py-2 bg-coral text-cream rounded-full border-2 border-espresso shadow-sticker-sm hover:-translate-y-0.5 hover:shadow-sticker transition-transform font-semibold">
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="inline-flex items-center inline-flex items-center gap-2 px-4 py-2 bg-coral text-cream rounded-full border-2 border-espresso shadow-sticker-sm hover:-translate-y-0.5 hover:shadow-sticker transition-transform font-semibold"
+                >
                   <Plus className="w-5 h-5 mr-2" />
                   Create Your First Campaign
                 </button>
@@ -799,9 +845,12 @@ const SponsorCampaignsPage = () => {
                     <Plus className="w-5 h-5 mr-2" />
                     Create New Campaign
                   </button>
-                  <button className="inline-flex items-center px-8 py-3 border border-red-600 text-coral rounded-lg hover:bg-coral/10 transition-colors font-semibold">
+                  <button
+                    onClick={() => router.push('/sponsors/analytics')}
+                    className="inline-flex items-center px-8 py-3 border border-red-600 text-coral rounded-lg hover:bg-coral/10 transition-colors font-semibold"
+                  >
                     <BarChart3 className="w-5 h-5 mr-2" />
-                    Campaign Templates
+                    View Analytics
                   </button>
                 </div>
               </div>

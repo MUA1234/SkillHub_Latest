@@ -202,11 +202,12 @@ export default function SponsorDashboard() {
           />
 
           {}
-          <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <section className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
             <StatPill onDark={false} tone="mustard"    badge="A" value={dashboardData?.stats?.activeCampaigns || 0}                                                    label="Active campaigns" />
             <StatPill onDark={false} tone="terracotta" badge="B" value={formatCurrency(dashboardData?.stats?.totalBudget || 0, { locale: language, compact: true })}   label="Total budget" />
             <StatPill onDark={false} tone="forest"     badge="C" value={formatNumber(dashboardData?.stats?.studentsReached || 0, { locale: language })}                label="Students reached" />
             <StatPill onDark={false} tone="espresso"   badge="D" value={dashboardData?.stats?.eventsHosted || 0}                                                       label="Events hosted" />
+            <StatPill onDark={false} tone="cream"      badge="E" value={dashboardData?.stats?.teacherPartnerships || 0}                                                label="Partner institutions" />
           </section>
 
           {}
