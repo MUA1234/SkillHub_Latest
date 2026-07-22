@@ -58,7 +58,14 @@ defmodule SkillHubWeb.TeacherController do
           id: tid, user_id: uid(conn), name: (if name == "", do: "Teacher", else: name), avatar_url: up[:avatar_url],
           experience_years: tp["experience_years"] || 0, hourly_rate: tp["hourly_rate"] || 0,
           average_rating: tp["average_rating"] || 0, total_reviews: tp["total_reviews"] || 0,
-          is_verified: tp["is_verified"] || false, specialization: tp["specialization"] || "General"
+          is_verified: tp["is_verified"] || false, specialization: tp["specialization"] || "General",
+          # Editable teacher_profiles fields (mirror @profile_cols) so the profile
+          # edit form can pre-fill them; PUT /teachers/profile writes them back.
+          title: tp["title"], teaching_style: tp["teaching_style"],
+          languages: tp["languages"] || [], specializations: tp["specializations"] || [],
+          achievements: tp["achievements"] || [], collaboration_interests: tp["collaboration_interests"] || [],
+          response_time: tp["response_time"], availability_status: tp["availability_status"],
+          is_online_available: tp["is_online_available"] || false, is_physical_available: tp["is_physical_available"] || false
         },
         stats: %{
           total_students: (if counts.total_students > 0, do: counts.total_students, else: tp["total_students"] || 0),
@@ -241,8 +248,8 @@ defmodule SkillHubWeb.TeacherController do
       rows =
         SQL.maps(
           """
-          select e.student_id::text student_id, u.email, up.first_name, up.last_name, up.avatar_url, up.location, up.university,
-            c.id::text course_id, c.title course_title, c.level, coalesce(e.progress_percentage, 0) progress, e.status, e.enrolled_at
+          select e.student_id::text student_id, u.email, up.first_name, up.last_name, up.avatar_url, up.location, up.university, up.phone, up.bio, up.major, up.year,
+            c.id::text course_id, c.title course_title, c.level, coalesce(e.progress_percentage, 0) progress, e.status, e.enrolled_at, e.last_accessed
           from public.course_enrollments e
           join public.courses c on c.id = e.course_id and c.teacher_id = $1::uuid
           join public.users u on u.id = e.student_id
@@ -260,11 +267,14 @@ defmodule SkillHubWeb.TeacherController do
           courses = Enum.map(es, &%{id: &1.course_id, title: &1.course_title || "Unknown Course", level: &1.level || "beginner", progress: &1.progress, status: &1.status || "active", enrolled_at: &1.enrolled_at})
           avg = if courses == [], do: 0, else: Float.round(Enum.sum(Enum.map(courses, & &1.progress)) / length(courses), 1)
           status = if Enum.any?(courses, &(&1.status == "active")), do: "active", else: "inactive"
+          last_active = es |> Enum.map(& &1.last_accessed) |> Enum.reject(&is_nil/1) |> Enum.sort(:desc) |> List.first()
 
           %{
             id: sid, email: first.email || "", first_name: first.first_name || "", last_name: first.last_name || "",
             avatar_url: first.avatar_url, location: first.location, university: first.university,
-            courses: courses, total_courses: length(courses), average_progress: avg, status: status, enrolled_at: first.enrolled_at
+            phone: first.phone, bio: first.bio, major: first.major, year: first.year,
+            courses: courses, total_courses: length(courses), average_progress: avg, status: status,
+            enrolled_at: first.enrolled_at, last_accessed: last_active
           }
         end)
 

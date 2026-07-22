@@ -361,6 +361,11 @@ class APIClient {
     });
   }
 
+  /** Fetch the caller's sponsor_profiles row to pre-fill the profile page. */
+  async getSponsorProfile(): Promise<{ success: boolean; profile: Record<string, any> }> {
+    return this.request("/api/v1/sponsors/profile");
+  }
+
 
   /** View an invite by its verification code. Public — the code IS the auth.
    *  The endpoint returns the student summary so the verify page can render
@@ -941,6 +946,15 @@ class APIClient {
         throw error;
       }
     }
+  }
+
+  /** Update the caller's teacher_profiles row (title, rate, teaching style,
+   *  languages, etc.). Backs the teacher profile edit page. */
+  async updateTeacherProfile(profile: Record<string, any>): Promise<any> {
+    return this.request("/api/v1/teachers/profile", {
+      method: "PUT",
+      body: JSON.stringify(profile),
+    });
   }
 
   async getTeacherSubjects(): Promise<any[]> {

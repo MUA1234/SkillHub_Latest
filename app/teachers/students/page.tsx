@@ -76,8 +76,15 @@ interface StudentEnrollment {
       last_name?: string;
       phone?: string;
       avatar_url?: string;
+      location?: string;
+      university?: string;
+      bio?: string;
+      major?: string;
+      year?: string;
     };
   };
+  total_courses?: number;
+  all_courses?: { id: string; title: string; level?: string; progress?: number; status?: string }[];
 }
 
 interface StudentsData {
@@ -200,16 +207,60 @@ const TeacherStudentsPage = () => {
       setError('');
       
       const response = await apiClient.getTeacherStudents();
-      const enrollmentsData = Array.isArray(response?.enrollments) ? response.enrollments : [];
+      // Backend groups by student and returns `students` (flat shape); this page
+      // renders one card per student expecting the nested `enrollments` shape.
+      // Map the grouped response into that shape so the list + profile modal work.
+      const rawStudents: any[] = Array.isArray(response?.students)
+        ? response.students
+        : Array.isArray(response?.enrollments) ? response.enrollments : [];
+
+      const enrollmentsData: StudentEnrollment[] = rawStudents.map((s: any) => {
+        // Already-nested rows (fallback endpoint) pass through unchanged.
+        if (s?.student?.profile) return s as StudentEnrollment;
+        const courses: any[] = Array.isArray(s.courses) ? s.courses : [];
+        const primary = courses[0] || {};
+        return {
+          id: s.id,
+          student_id: s.id,
+          course_id: primary.id || '',
+          teacher_id: '',
+          status: s.status || 'active',
+          progress_percentage: Math.round(s.average_progress ?? primary.progress ?? 0),
+          enrolled_at: s.enrolled_at,
+          last_accessed: s.last_accessed,
+          payment_status: '',
+          course: primary.id ? { id: primary.id, title: primary.title, level: primary.level } : undefined,
+          student: {
+            id: s.id,
+            email: s.email || '',
+            profile: {
+              first_name: s.first_name || '',
+              last_name: s.last_name || '',
+              phone: s.phone,
+              avatar_url: s.avatar_url,
+              location: s.location,
+              university: s.university,
+              bio: s.bio,
+              major: s.major,
+              year: s.year,
+            },
+          },
+          total_courses: s.total_courses ?? courses.length,
+          all_courses: courses.map((c: any) => ({ id: c.id, title: c.title, level: c.level, progress: c.progress, status: c.status })),
+        } as StudentEnrollment;
+      });
+
+      const totalStudentsCount = response?.total_count ?? response?.total_students ?? enrollmentsData.length;
+      const activeStudentsCount = response?.active_count ?? response?.active_students ?? enrollmentsData.filter(e => e.status === 'active').length;
       setStudentsData({
         enrollments: enrollmentsData,
-        total_students: response?.total_students || 0,
-        active_students: response?.active_students || 0,
+        total_students: totalStudentsCount,
+        active_students: activeStudentsCount,
         completed_courses: response?.completed_courses || 0
       });
 
       const stats: StudentStats = {
-        totalStudents: response?.total_students || 0,
+        totalStudents: totalStudentsCount,
         averageGrade: calculateAverageGrade(enrollmentsData),
         attendanceRate: calculateAttendanceRate(enrollmentsData),
         activeClasses: calculateActiveClasses(enrollmentsData)
@@ -1179,29 +1230,60 @@ const TeacherStudentsPage = () => {
                   </span>
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-espresso">{currentStudent.student?.profile?.first_name || currentStudent.student?.profile?.last_name || 'Student'}</h2>
-                  <p className="text-espresso/70">{currentStudent.course?.level || 'N/A'}</p>
+                  <h2 className="text-xl font-bold text-espresso">
+                    {`${currentStudent.student?.profile?.first_name || ''} ${currentStudent.student?.profile?.last_name || ''}`.trim() || 'Student'}
+                  </h2>
+                  <p className="text-espresso/70">{currentStudent.course?.level || currentStudent.student?.profile?.university || 'Student'}</p>
                 </div>
               </div>
-              
-              <div className="space-y-4 mb-6">
+
+              <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
                   <p className="text-sm text-espresso/55">Email</p>
-                  <p className="font-medium">{currentStudent.student?.email}</p>
+                  <p className="font-medium break-words">{currentStudent.student?.email || 'N/A'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-espresso/55">Phone</p>
                   <p className="font-medium">{currentStudent.student?.profile?.phone || 'N/A'}</p>
                 </div>
                 <div>
+                  <p className="text-sm text-espresso/55">Location</p>
+                  <p className="font-medium">{currentStudent.student?.profile?.location || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-espresso/55">University</p>
+                  <p className="font-medium">{currentStudent.student?.profile?.university || 'N/A'}</p>
+                </div>
+                <div>
                   <p className="text-sm text-espresso/55">Enrolled Date</p>
-                  <p className="font-medium">{currentStudent.enrolled_at}</p>
+                  <p className="font-medium">{currentStudent.enrolled_at ? new Date(currentStudent.enrolled_at).toLocaleDateString() : 'N/A'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-espresso/55">Last Active</p>
-                  <p className="font-medium">{currentStudent.last_accessed || 'N/A'}</p>
+                  <p className="font-medium">{currentStudent.last_accessed ? new Date(currentStudent.last_accessed).toLocaleDateString() : 'N/A'}</p>
                 </div>
               </div>
+
+              {currentStudent.student?.profile?.bio && (
+                <div className="mb-6">
+                  <p className="text-sm text-espresso/55 mb-1">About</p>
+                  <p className="text-sm text-espresso/80">{currentStudent.student.profile.bio}</p>
+                </div>
+              )}
+
+              {currentStudent.all_courses && currentStudent.all_courses.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="font-medium text-espresso mb-3">Enrolled courses ({currentStudent.all_courses.length})</h4>
+                  <div className="space-y-2">
+                    {currentStudent.all_courses.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between bg-cream-100 px-3 py-2 rounded-lg">
+                        <span className="text-sm font-medium text-espresso truncate mr-2">{c.title}</span>
+                        <span className="text-xs font-semibold text-espresso/60 shrink-0">{Math.round(c.progress || 0)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               <div className="mb-6">
                 <h4 className="font-medium text-espresso mb-3">Performance</h4>

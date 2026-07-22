@@ -612,7 +612,7 @@ defmodule SkillHubWeb.StudentController do
 
     %{
       id: s["id"], title: s["title"], description: s["description"], course_title: r.course_title,
-      teacher_name: r.teacher_name || "Unknown Teacher", teacher_avatar: r.teacher_avatar,
+      teacher_id: s["teacher_id"], teacher_name: r.teacher_name || "Unknown Teacher", teacher_avatar: r.teacher_avatar,
       scheduled_start: s["scheduled_start"], scheduled_end: s["scheduled_end"], session_type: s["session_type"],
       meeting_link: s["meeting_link"], status: s["status"], max_participants: s["max_participants"],
       current_participants: s["current_participants"] || 0, price: s["price"] || 0, requires_payment: s["requires_payment"] || false,

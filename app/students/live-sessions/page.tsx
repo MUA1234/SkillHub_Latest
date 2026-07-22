@@ -31,7 +31,7 @@ import {
 
 interface LiveSession {
   id: string;
-  teacher_id?: string;
+  teacher_id?: string | null;
   teacher_name?: string;
   teacher_avatar?: string | null;
   course_title?: string | null;
@@ -453,19 +453,40 @@ const StudentLiveSessionsPage = () => {
               </div>
 
               {}
-              <div className="flex items-center gap-3 mb-5 p-3 rounded-2xl bg-cream-100 border-2 border-espresso/10">
-                {selectedSession.teacher_avatar ? (
-                  <img src={selectedSession.teacher_avatar} alt={selectedSession.teacher_name || 'Teacher'} className="w-12 h-12 rounded-full object-cover" />
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-forest text-cream flex items-center justify-center font-bold text-lg">
-                    {(selectedSession.teacher_name || 'T').charAt(0).toUpperCase()}
+              {selectedSession.teacher_id ? (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/students/find-teachers/${selectedSession.teacher_id}`)}
+                  className="w-full flex items-center gap-3 mb-5 p-3 rounded-2xl bg-cream-100 border-2 border-espresso/10 hover:border-terracotta/50 hover:bg-mustard/10 transition-colors text-left"
+                >
+                  {selectedSession.teacher_avatar ? (
+                    <img src={selectedSession.teacher_avatar} alt={selectedSession.teacher_name || 'Teacher'} className="w-12 h-12 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-forest text-cream flex items-center justify-center font-bold text-lg">
+                      {(selectedSession.teacher_name || 'T').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <p className="text-xs font-semibold text-espresso/55 uppercase tracking-wide">Taught by</p>
+                    <p className="font-display text-lg font-bold text-espresso">{selectedSession.teacher_name || 'Unknown Teacher'}</p>
                   </div>
-                )}
-                <div>
-                  <p className="text-xs font-semibold text-espresso/55 uppercase tracking-wide">Taught by</p>
-                  <p className="font-display text-lg font-bold text-espresso">{selectedSession.teacher_name || 'Unknown Teacher'}</p>
+                  <span className="text-xs font-semibold text-terracotta">View profile →</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-3 mb-5 p-3 rounded-2xl bg-cream-100 border-2 border-espresso/10">
+                  {selectedSession.teacher_avatar ? (
+                    <img src={selectedSession.teacher_avatar} alt={selectedSession.teacher_name || 'Teacher'} className="w-12 h-12 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-forest text-cream flex items-center justify-center font-bold text-lg">
+                      {(selectedSession.teacher_name || 'T').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs font-semibold text-espresso/55 uppercase tracking-wide">Taught by</p>
+                    <p className="font-display text-lg font-bold text-espresso">{selectedSession.teacher_name || 'Unknown Teacher'}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {selectedSession.description && (
                 <p className="text-sm text-espresso/75 mb-5 leading-relaxed">{selectedSession.description}</p>

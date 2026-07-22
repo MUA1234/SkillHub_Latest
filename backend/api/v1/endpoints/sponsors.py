@@ -67,6 +67,37 @@ async def setup_sponsor_profile(
         raise HTTPException(status_code=500, detail="Failed to create sponsor profile")
     return {"success": True, "profile_id": result.get("id"), "created": True}
 
+
+@router.get("/profile")
+async def get_sponsor_profile_endpoint(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Return the caller's sponsor_profiles row (or an empty stub) so the
+    sponsor profile page can pre-fill its edit form. Role-guarded to sponsors."""
+    if str(current_user.role) != "sponsor" and getattr(current_user.role, "value", None) != "sponsor":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only sponsor accounts have a sponsor profile.",
+        )
+
+    user_id = str(current_user.id)
+    row = SupabaseREST.select_one("sponsor_profiles", "*", {"user_id": user_id}) or {}
+    return {
+        "success": True,
+        "profile": {
+            "id": str(row.get("id")) if row.get("id") else None,
+            "user_id": user_id,
+            "company_name": row.get("company_name"),
+            "industry": row.get("industry"),
+            "website": row.get("website"),
+            "description": row.get("description"),
+            "contact_person": row.get("contact_person"),
+            "contact_email": row.get("contact_email"),
+            "contact_phone": row.get("contact_phone"),
+            "logo_url": row.get("logo_url"),
+        },
+    }
+
 async def get_sponsor_profile(current_user: User, db: AsyncSession):
     """Helper function to get sponsor profile"""
     if current_user.role != 'sponsor':
