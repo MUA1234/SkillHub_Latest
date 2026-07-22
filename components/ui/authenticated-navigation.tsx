@@ -252,7 +252,6 @@ const AuthenticatedNavigation: React.FC<AuthenticatedNavigationProps> = ({
           name: 'Network',
           icon: Network,
           dropdown: [
-            { name: 'Find Teachers', href: '/teachers/network/find-teachers', icon: UserPlus },
             { name: 'Advertisements', href: '/teachers/network/advertisements', icon: Megaphone }
           ]
         },
