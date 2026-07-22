@@ -31,11 +31,16 @@ import {
 
 interface LiveSession {
   id: string;
-  teacher_id: string;
+  teacher_id?: string;
+  teacher_name?: string;
+  teacher_avatar?: string | null;
+  course_title?: string | null;
   title: string;
   description?: string;
   subject?: string;
   grade_level?: string;
+  session_type?: string;
+  meeting_link?: string | null;
   scheduled_start: string;
   scheduled_end: string;
   status: string;
@@ -44,7 +49,14 @@ interface LiveSession {
   price?: number;
   currency?: string;
   requires_payment: boolean;
-  recording_enabled: boolean;
+  recording_enabled?: boolean;
+  accessibility?: {
+    target_disability_types?: string[];
+    has_live_captions?: boolean;
+    has_sign_language_interpreter?: boolean;
+    accessibility_level?: number;
+    relevance_score?: number | null;
+  };
 }
 
 const StudentLiveSessionsPage = () => {
@@ -56,6 +68,7 @@ const StudentLiveSessionsPage = () => {
   const [myEnrollments, setMyEnrollments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedSession, setSelectedSession] = useState<LiveSession | null>(null);
   
   const currentUser = getCurrentUser();
   const userName = `${currentUser?.profile?.first_name || 'Demo'} ${currentUser?.profile?.last_name || 'Student'}`.trim();
@@ -322,7 +335,22 @@ const StudentLiveSessionsPage = () => {
                   const tilt = tilts[index % tilts.length];
                   const onDark = tone === 'forest' || tone === 'terracotta' || tone === 'espresso';
                   return (
-                    <KidCard key={session.id} tone={tone} tilt={tilt} sticker>
+                    <KidCard
+                      key={session.id}
+                      tone={tone}
+                      tilt={tilt}
+                      sticker
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedSession(session)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedSession(session);
+                        }
+                      }}
+                      className="cursor-pointer hover:-translate-y-1 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta/50"
+                    >
                       <div className="flex items-start justify-between gap-2 mb-3">
                         <h3 className="font-display text-lg font-bold leading-tight line-clamp-2">
                           {session.title}
@@ -331,6 +359,13 @@ const StudentLiveSessionsPage = () => {
                           <TagPill tone="terracotta" className="!bg-coral !text-cream !border-cream/20 animate-pulse">LIVE</TagPill>
                         )}
                       </div>
+
+                      {session.teacher_name && (
+                        <p className={`text-sm font-semibold mb-2 inline-flex items-center gap-1.5 ${onDark ? 'text-cream/90' : 'text-espresso/80'}`}>
+                          <Star className="w-3.5 h-3.5" />
+                          {session.teacher_name}
+                        </p>
+                      )}
 
                       {session.description && (
                         <p className={`text-sm mb-3 line-clamp-2 ${onDark ? 'opacity-80' : 'text-espresso/70'}`}>
@@ -364,7 +399,9 @@ const StudentLiveSessionsPage = () => {
                         </div>
                       )}
 
-                      {getEnrollmentButton(session)}
+                      <div onClick={(e) => e.stopPropagation()}>
+                        {getEnrollmentButton(session)}
+                      </div>
                     </KidCard>
                   );
                 })}
@@ -380,6 +417,97 @@ const StudentLiveSessionsPage = () => {
           </div>
         </div>
       </div>
+
+      {}
+      {selectedSession && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-espresso/50 backdrop-blur-sm"
+          onClick={() => setSelectedSession(null)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-cream-50 rounded-3xl border-2 border-espresso/10 shadow-kid w-full max-w-lg max-h-[90vh] overflow-y-auto"
+          >
+            <div className="p-6 sm:p-8">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    {selectedSession.status === 'live' && (
+                      <TagPill tone="terracotta" className="!bg-coral !text-cream !border-cream/20 animate-pulse">LIVE</TagPill>
+                    )}
+                    <TagPill tone="mustard">{selectedSession.status}</TagPill>
+                  </div>
+                  <h2 className="font-display text-2xl font-bold text-espresso leading-tight">
+                    {selectedSession.title}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setSelectedSession(null)}
+                  aria-label="Close"
+                  className="shrink-0 w-9 h-9 rounded-full bg-espresso/10 hover:bg-espresso/20 flex items-center justify-center text-espresso transition-colors"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              {}
+              <div className="flex items-center gap-3 mb-5 p-3 rounded-2xl bg-cream-100 border-2 border-espresso/10">
+                {selectedSession.teacher_avatar ? (
+                  <img src={selectedSession.teacher_avatar} alt={selectedSession.teacher_name || 'Teacher'} className="w-12 h-12 rounded-full object-cover" />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-forest text-cream flex items-center justify-center font-bold text-lg">
+                    {(selectedSession.teacher_name || 'T').charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs font-semibold text-espresso/55 uppercase tracking-wide">Taught by</p>
+                  <p className="font-display text-lg font-bold text-espresso">{selectedSession.teacher_name || 'Unknown Teacher'}</p>
+                </div>
+              </div>
+
+              {selectedSession.description && (
+                <p className="text-sm text-espresso/75 mb-5 leading-relaxed">{selectedSession.description}</p>
+              )}
+
+              <div className="flex flex-wrap gap-2 mb-5">
+                {selectedSession.course_title && <TagPill tone="terracotta">{selectedSession.course_title}</TagPill>}
+                {selectedSession.session_type && <TagPill tone="forest">{selectedSession.session_type.replace(/_/g, ' ')}</TagPill>}
+                {selectedSession.accessibility?.has_live_captions && <TagPill tone="mustard">📝 Live captions</TagPill>}
+                {selectedSession.accessibility?.has_sign_language_interpreter && <TagPill tone="mustard">🤟 Sign language</TagPill>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="p-3 rounded-2xl bg-cream-100 border-2 border-espresso/10">
+                  <p className="text-xs font-semibold text-espresso/55 flex items-center gap-1 mb-1"><Calendar className="w-3.5 h-3.5" /> Starts</p>
+                  <p className="text-sm font-bold text-espresso">{formatDateTime(selectedSession.scheduled_start)}</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-cream-100 border-2 border-espresso/10">
+                  <p className="text-xs font-semibold text-espresso/55 flex items-center gap-1 mb-1"><Clock className="w-3.5 h-3.5" /> Ends</p>
+                  <p className="text-sm font-bold text-espresso">{formatDateTime(selectedSession.scheduled_end)}</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-cream-100 border-2 border-espresso/10">
+                  <p className="text-xs font-semibold text-espresso/55 flex items-center gap-1 mb-1"><Users className="w-3.5 h-3.5" /> Seats</p>
+                  <p className="text-sm font-bold text-espresso">{selectedSession.current_participants}/{selectedSession.max_participants || 'N/A'}</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-cream-100 border-2 border-espresso/10">
+                  <p className="text-xs font-semibold text-espresso/55 flex items-center gap-1 mb-1"><DollarSign className="w-3.5 h-3.5" /> Price</p>
+                  <p className="text-sm font-bold text-espresso">
+                    {selectedSession.requires_payment && selectedSession.price && selectedSession.price > 0
+                      ? formatCurrency(selectedSession.price, { currency: selectedSession.currency || 'LKR', locale: language })
+                      : 'Free'}
+                  </p>
+                </div>
+              </div>
+
+              <div onClick={(e) => e.stopPropagation()}>
+                {getEnrollmentButton(selectedSession)}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
