@@ -17,6 +17,10 @@ import uuid
 from database.database import get_db
 from core.security import get_current_user
 from database.supabase_client import SupabaseREST
+from services.track_matching import (
+    tracks_for_disabilities,
+    primary_track as compute_primary_track,
+)
 
 router = APIRouter()
 
@@ -281,6 +285,15 @@ async def create_disability_profile(
         profile_dict = profile_data.dict()
         profile_dict["severity_levels"] = json.dumps(profile_dict.get("severity_levels") or {})
 
+        # Derive the coarse accessibility tracks (visual / hearing) that drive
+        # dashboard routing and the teacher↔student data wall. Recomputed on
+        # every save so the profile and its tracks never drift.
+        _disability_types = profile_dict.get("disability_types") or []
+        profile_dict["tracks"] = tracks_for_disabilities(_disability_types)
+        profile_dict["primary_track"] = compute_primary_track(
+            _disability_types, profile_dict.get("primary_disability")
+        )
+
         if existing:
             await db.execute(
                 text("""
@@ -288,6 +301,8 @@ async def create_disability_profile(
                 SET has_disability = :has_disability,
                     disability_types = :disability_types,
                     primary_disability = :primary_disability,
+                    tracks = :tracks,
+                    primary_track = :primary_track,
                     severity_levels = :severity_levels,
                     professionally_diagnosed = :professionally_diagnosed,
                     iep_status = :iep_status,
@@ -313,12 +328,14 @@ async def create_disability_profile(
                 text("""
                 INSERT INTO student_disability_profiles (
                     user_id, has_disability, disability_types, primary_disability,
+                    tracks, primary_track,
                     severity_levels, professionally_diagnosed, iep_status,
                     accommodation_letter, guardian_consent, guardian_email,
                     guardian_phone, guardian_relationship, additional_needs,
                     share_with_teachers, share_with_sponsors, onboarding_completed
                 ) VALUES (
                     :user_id, :has_disability, :disability_types, :primary_disability,
+                    :tracks, :primary_track,
                     :severity_levels, :professionally_diagnosed, :iep_status,
                     :accommodation_letter, :guardian_consent, :guardian_email,
                     :guardian_phone, :guardian_relationship, :additional_needs,
@@ -708,6 +725,14 @@ async def save_teacher_specialization(
         existing = result.fetchone()
 
         spec_dict = spec_data.dict()
+
+        # Derive the coarse teaching tracks (visual / hearing) from the
+        # disability types this teacher has experience with. These drive the
+        # teacher↔student data wall and the specialist dashboard.
+        spec_dict["teaching_tracks"] = tracks_for_disabilities(
+            spec_dict.get("disability_experience")
+        )
+
         json_cols = {"certifications", "training_completed", "accommodation_strategies"}
         bind_params = {
             k: (json.dumps(v) if k in json_cols else v) for k, v in spec_dict.items()

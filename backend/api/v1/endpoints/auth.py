@@ -27,6 +27,7 @@ from services.email_service import (
     send_password_reset_email,
     send_welcome_email,
 )
+from services import track_matching
 from config import settings
 
 router = APIRouter()
@@ -166,6 +167,23 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 
+def _enrich_user_with_tracks(user) -> None:
+    """Attach accessibility-track fields to a user object in place so the login
+    response / `/me` carry enough for the client to route to the right
+    dashboard. Best-effort — never let a lookup hiccup break auth."""
+    try:
+        role = getattr(user, "role", None)
+        role_val = role.value if hasattr(role, "value") else role
+        if role_val == "student":
+            user.accessibility_track = track_matching.get_student_primary_track(str(user.id))
+        elif role_val == "teacher":
+            info = track_matching.get_teacher_specialist_status(str(user.id))
+            user.teaching_tracks = info["teaching_tracks"]
+            user.verified_specialist = info["verified_specialist"]
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(f"⚠️ Track enrichment failed for {getattr(user, 'id', None)}: {exc}")
+
+
 @router.post("/login", response_model=Token)
 async def login(
     user_credentials: UserLogin,
@@ -275,6 +293,7 @@ async def login(
                 self.profile = profile
 
         user = DatabaseUser(authenticated_user, user_profile)
+        _enrich_user_with_tracks(user)
 
         access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
         access_token = create_access_token(
@@ -306,6 +325,7 @@ async def logout(response: Response):
 
 @router.get("/me", response_model=UserSchema)
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    _enrich_user_with_tracks(current_user)
     return current_user
 
 

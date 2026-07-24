@@ -336,6 +336,24 @@ export function AdaptiveAccessibilityProvider({ children }: AdaptiveAccessibilit
     }
   }, []);
 
+  // On first mount for an authenticated user, reconcile the profile with the
+  // server: the DB is the source of truth, and any local-only assessment (saved
+  // during signup before a token existed) gets pushed up. This is the caller
+  // that was previously missing, so the signup assessment never reached the DB.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = localStorage.getItem('access_token');
+    const cu = localStorage.getItem('current_user');
+    if (!token || !cu) return;
+    try {
+      const user = JSON.parse(cu);
+      if (user?.id) loadProfile(user.id);
+    } catch {
+      /* ignore malformed current_user */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const clearProfile = useCallback(() => {
     setProfile(null);
     localStorage.removeItem('a11y_profile');

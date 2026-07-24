@@ -43,6 +43,7 @@ from schemas.teacher_schemas import (
 from core.security import get_current_active_user
 from database.supabase_client import SupabaseREST
 from database.supabase_async import SupabaseRESTAsync
+from services import track_matching
 
 logger = logging.getLogger(__name__)
 
@@ -325,6 +326,11 @@ async def get_teacher_students_rest(
             )
 
             student_ids = list(set([e.get("student_id") for e in enrollments if e.get("student_id")]))
+
+            # Hard wall: drop students outside this teacher's tracks (normal
+            # teachers see no differently-abled students, and vice versa).
+            student_ids = track_matching.filter_student_ids_for_teacher(student_ids, user_id)
+            enrollments = [e for e in enrollments if e.get("student_id") in set(student_ids)]
 
             users_rows = await SupabaseRESTAsync.select_in("users", "id", student_ids, "id,email")
             user_by_id = {str(u.get("id")): u for u in users_rows}
@@ -1774,15 +1780,22 @@ async def add_session_participant(
         student_query = text("SELECT * FROM users WHERE id = :student_id AND role = 'student'")
         result = await db.execute(student_query, {'student_id': str(student_id)})
         student = result.mappings().fetchone()
-        
+
         if not student:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Student not found"
             )
-        
+
+        # Hard wall: a teacher may only add students on a matching track.
+        if not track_matching.teacher_can_see_student(str(current_user.id), str(student_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only add students within your accessibility track."
+            )
+
         existing_query = text("""
-            SELECT * FROM session_participants 
+            SELECT * FROM session_participants
             WHERE session_id = :session_id AND student_id = :student_id
         """)
         result = await db.execute(existing_query, {
@@ -2196,9 +2209,27 @@ async def get_teacher_students(
     
     try:
         from sqlalchemy import text
-        
-        enrollments_sql = text("""
-            SELECT ce.*, 
+
+        # Hard wall (defense-in-depth): a specialist teacher only sees students
+        # whose accessibility tracks overlap theirs; a normal teacher never sees
+        # a differently-abled student. Correct enrollment already prevents
+        # cross-track pairing, but this keeps counts + rows consistent even if a
+        # stray enrollment exists. `corr_col` is the outer student_id column.
+        teacher_tracks = track_matching.get_teacher_tracks(str(current_user.id))
+
+        def _track_where(corr_col: str) -> str:
+            if teacher_tracks:
+                return (
+                    f" AND EXISTS (SELECT 1 FROM student_disability_profiles sdp "
+                    f"WHERE sdp.user_id = {corr_col} AND sdp.tracks && :teacher_tracks) "
+                )
+            return (
+                f" AND NOT EXISTS (SELECT 1 FROM student_disability_profiles sdp "
+                f"WHERE sdp.user_id = {corr_col} AND coalesce(array_length(sdp.tracks, 1), 0) > 0) "
+            )
+
+        enrollments_sql = text(f"""
+            SELECT ce.*,
                    u.email as student_email,
                    up.first_name, up.last_name, up.avatar_url, up.location, up.university,
                    c.title as course_title, c.level as course_level, c.price as course_price, c.thumbnail_url
@@ -2208,36 +2239,42 @@ async def get_teacher_students(
             LEFT JOIN courses c ON ce.course_id = c.id
             WHERE ce.teacher_id = :teacher_id
             AND ce.status IN ('pending', 'active', 'completed', 'cancelled')
+            {_track_where('ce.student_id')}
             ORDER BY ce.enrolled_at DESC
             LIMIT :limit OFFSET :offset
         """)
-        
-        count_sql = text("""
+
+        count_sql = text(f"""
             SELECT COUNT(*) as total_count
-            FROM course_enrollments 
+            FROM course_enrollments
             WHERE teacher_id = :teacher_id
             AND status IN ('pending', 'active', 'completed', 'cancelled')
+            {_track_where('course_enrollments.student_id')}
         """)
-        
-        active_count_sql = text("""
+
+        active_count_sql = text(f"""
             SELECT COUNT(*) as active_count
-            FROM course_enrollments 
+            FROM course_enrollments
             WHERE teacher_id = :teacher_id
             AND status = 'active'
+            {_track_where('course_enrollments.student_id')}
         """)
-        
-        completed_count_sql = text("""
+
+        completed_count_sql = text(f"""
             SELECT COUNT(*) as completed_count
-            FROM course_enrollments 
+            FROM course_enrollments
             WHERE teacher_id = :teacher_id
             AND status = 'completed'
+            {_track_where('course_enrollments.student_id')}
         """)
-        
+
         params = {
             'teacher_id': str(teacher_profile.id),
             'limit': pagination.limit,
             'offset': (pagination.page - 1) * pagination.limit
         }
+        if teacher_tracks:
+            params['teacher_tracks'] = teacher_tracks
         
         enrollments_result = await db.execute(enrollments_sql, params)
         count_result = await db.execute(count_sql, params)
@@ -3497,7 +3534,14 @@ async def add_student_to_course(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Student not found. Please check the email address."
             )
-        
+
+        # Hard wall: a teacher may only enroll students on a matching track.
+        if not track_matching.teacher_can_see_student(str(current_user.id), str(student.id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only enroll students within your accessibility track."
+            )
+
         existing_enrollment = await db.execute(
             select(CourseEnrollment).where(
                 and_(

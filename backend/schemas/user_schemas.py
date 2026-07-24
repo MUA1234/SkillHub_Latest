@@ -3,7 +3,7 @@ Pydantic schemas for auth/user payloads.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -37,6 +37,13 @@ class User(BaseModel):
     is_active: bool = True
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    # Accessibility track enrichment (populated at login / on /me).
+    # Students carry `accessibility_track` (their primary track → landing
+    # dashboard). Teachers carry `teaching_tracks` + `verified_specialist`.
+    accessibility_track: Optional[str] = None
+    teaching_tracks: Optional[List[str]] = None
+    verified_specialist: Optional[bool] = None
 
     class Config:
         from_attributes = True

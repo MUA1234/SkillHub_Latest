@@ -23,9 +23,21 @@ import { DoodleStar, DoodleSparkle, DoodleSquiggle, DoodleHeart } from '@/compon
 import { DisabilityAssessmentForm } from '@/components/DisabilityAssessmentForm';
 import { AssessmentResult } from '@/lib/disability-assessment';
 import { useAdaptiveAccessibility } from '@/contexts/AdaptiveAccessibilityContext';
+import {
+  Track,
+  primaryTrack,
+  trackHome,
+  teacherHome,
+  homeForUser,
+  trackLabel,
+  disabilityTypesForTrack,
+  specializationForTrack,
+} from '@/lib/accessibility-tracks';
 
 type UserRole = 'student' | 'teacher' | 'sponsor';
 type Step = 'login' | 'chooseRole' | 'register' | 'assessment';
+
+const TEACHER_TRACKS: Track[] = ['visual', 'hearing'];
 
 interface SponsorFields {
   company_name: string;
@@ -52,6 +64,17 @@ export default function AuthPage() {
     last_name: '',
     isDifferentlyAbled: null as boolean | null,
   });
+
+  // Teacher signup: "willing to teach differently-abled students?" + which tracks.
+  const [teachesDifferentlyAbled, setTeachesDifferentlyAbled] = useState<boolean | null>(null);
+  const [teacherTracks, setTeacherTracks] = useState<Track[]>([]);
+
+  const toggleTeacherTrack = (track: Track) => {
+    setTeacherTracks((prev) =>
+      prev.includes(track) ? prev.filter((t) => t !== track) : [...prev, track],
+    );
+    setError('');
+  };
 
   const [sponsorFields, setSponsorFields] = useState<SponsorFields>({
     company_name: '',
@@ -89,9 +112,7 @@ export default function AuthPage() {
           password: formData.password,
         });
         setCurrentUser(response.user);
-        const userRole = response.user.role;
-        const dashboardPath = userRole === 'admin' ? '/admin/dashboard' : `/${userRole}s/dashboard`;
-        router.push(dashboardPath);
+        router.push(homeForUser(response.user));
       } else if (step === 'register' && selectedRole) {
         const user = await apiClient.register({
           email: formData.email,
@@ -135,6 +156,37 @@ export default function AuthPage() {
           return;
         }
 
+        // Specialist teacher: auto-login, persist the chosen tracks, then land
+        // straight on the specialist dashboard (mirrors the sponsor path).
+        if (selectedRole === 'teacher' && teachesDifferentlyAbled === true) {
+          try {
+            const resp = await apiClient.login({
+              email: formData.email,
+              password: formData.password,
+            });
+            await apiClient.saveTeacherSpecialization({
+              specializations: teacherTracks.map((t) => specializationForTrack(t)),
+              disability_experience: teacherTracks.flatMap((t) => disabilityTypesForTrack(t)),
+              accepts_iep_students: true,
+            });
+            // Merge the chosen tracks so the specialist dashboard guard passes
+            // right away (the login response predates the specialization write).
+            setCurrentUser({
+              ...resp.user,
+              teaching_tracks: teacherTracks,
+              verified_specialist: false,
+            });
+            router.push(teacherHome(teacherTracks));
+          } catch (specErr) {
+            console.warn('Specialist teacher setup failed; can finish in settings.', specErr);
+            setError('Account created. Sign in to finish setting up your specialist profile.');
+            setStep('login');
+            setFormData({ ...formData, password: '' });
+          }
+          setIsLoading(false);
+          return;
+        }
+
         setError(`Registration successful. We sent a verification email — please confirm before signing in as a ${selectedRole}.`);
         setStep('login');
         setFormData({ ...formData, password: '' });
@@ -154,15 +206,44 @@ export default function AuthPage() {
     }
   };
 
-  const handleAssessmentComplete = (result: AssessmentResult) => {
+  const handleAssessmentComplete = async (result: AssessmentResult) => {
     if (registeredUserId) {
       initializeFromAssessment(result, registeredUserId);
     }
-    router.push('/students/dashboard');
+
+    // Rank inferred disabilities by confidence; the top one drives the primary
+    // track (which dashboard the student lands on).
+    const sorted = [...result.inferredDisabilities].sort((a, b) => b.confidence - a.confidence);
+    const types = sorted.map((d) => d.type);
+    const track = primaryTrack(types, sorted[0]?.type);
+
+    // Auto-login so we have a token, then persist the profile server-side (the
+    // source of truth for the teacher↔student data wall and future logins).
+    try {
+      const resp = await apiClient.login({
+        email: formData.email,
+        password: formData.password,
+      });
+      await apiClient.saveDisabilityProfile({
+        has_disability: sorted.length > 0,
+        disability_types: types,
+        primary_disability: sorted[0]?.type ?? null,
+        severity_levels: Object.fromEntries(sorted.map((d) => [d.type, d.severity])),
+        onboarding_completed: true,
+      });
+      // The login response predates the profile write, so its
+      // accessibility_track is still null — merge the just-computed track so
+      // the track dashboard's guard sees it immediately.
+      setCurrentUser({ ...resp.user, accessibility_track: track ?? null });
+    } catch (err) {
+      console.warn('Could not persist disability profile at signup:', err);
+    }
+
+    router.push(trackHome(track));
   };
 
   const handleAssessmentSkip = () => {
-    router.push('/students/dashboard');
+    router.push(trackHome(null));
   };
 
   const roleIcons: Record<UserRole, JSX.Element> = {
@@ -612,6 +693,72 @@ export default function AuthPage() {
                   </AnimatePresence>
                 )}
 
+                {selectedRole === 'teacher' && (
+                  <div className="mt-4 p-5 bg-forest/10 rounded-2xl border-2 border-forest/30">
+                    <label className="block text-sm font-semibold text-espresso mb-2">
+                      Are you willing to teach differently-abled students?
+                    </label>
+                    <p className="text-xs text-espresso/65 mb-4">
+                      Specialist teachers are matched only with students in the tracks they choose.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { value: true, label: 'Yes', sublabel: 'I want to teach a specialist track' },
+                        { value: false, label: 'No', sublabel: 'I teach the general track' },
+                      ].map((option) => (
+                        <motion.button
+                          key={String(option.value)}
+                          type="button"
+                          onClick={() => {
+                            setTeachesDifferentlyAbled(option.value);
+                            if (!option.value) setTeacherTracks([]);
+                            setError('');
+                          }}
+                          whileHover={{ y: -2 }}
+                          whileTap={{ scale: 0.98 }}
+                          className={`p-4 rounded-2xl border-2 transition-all duration-200 flex flex-col items-center text-center ${
+                            teachesDifferentlyAbled === option.value
+                              ? 'bg-forest text-cream border-espresso shadow-sticker-sm'
+                              : 'bg-cream-50 text-espresso border-espresso/15 hover:border-espresso hover:-translate-y-0.5'
+                          }`}
+                        >
+                          <span className="font-medium">{option.label}</span>
+                          <span className="text-xs mt-1 opacity-75">{option.sublabel}</span>
+                        </motion.button>
+                      ))}
+                    </div>
+
+                    {teachesDifferentlyAbled === true && (
+                      <div className="mt-4">
+                        <label className="block text-sm font-semibold text-espresso mb-2">
+                          Which students do you want to teach?
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {TEACHER_TRACKS.map((track) => (
+                            <motion.button
+                              key={track}
+                              type="button"
+                              onClick={() => toggleTeacherTrack(track)}
+                              whileHover={{ y: -2 }}
+                              whileTap={{ scale: 0.98 }}
+                              className={`p-4 rounded-2xl border-2 transition-all duration-200 text-center ${
+                                teacherTracks.includes(track)
+                                  ? 'bg-terracotta text-cream border-espresso shadow-sticker-sm'
+                                  : 'bg-cream-50 text-espresso border-espresso/15 hover:border-espresso hover:-translate-y-0.5'
+                              }`}
+                            >
+                              <span className="font-medium">{trackLabel(track)} impaired</span>
+                            </motion.button>
+                          ))}
+                        </div>
+                        <p className="mt-3 text-xs text-espresso/65">
+                          You can add certifications and accommodation details later in Settings.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
@@ -619,6 +766,10 @@ export default function AuthPage() {
                   disabled={
                     isLoading ||
                     (selectedRole === 'student' && formData.isDifferentlyAbled === null) ||
+                    (selectedRole === 'teacher' && teachesDifferentlyAbled === null) ||
+                    (selectedRole === 'teacher' &&
+                      teachesDifferentlyAbled === true &&
+                      teacherTracks.length === 0) ||
                     (selectedRole === 'sponsor' && !sponsorFields.company_name)
                   }
                   className="btn-kid-primary w-full !rounded-2xl !py-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-sticker-sm"
@@ -628,6 +779,8 @@ export default function AuthPage() {
                     ? 'Processing...'
                     : selectedRole === 'student' && formData.isDifferentlyAbled === true
                     ? 'Continue to Assessment'
+                    : selectedRole === 'teacher' && teachesDifferentlyAbled === true
+                    ? 'Create Specialist Account'
                     : 'Create Account'}
                 </motion.button>
 

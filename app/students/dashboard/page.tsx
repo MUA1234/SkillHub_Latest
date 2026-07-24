@@ -9,6 +9,7 @@ import AuthenticatedNavigation from '@/components/ui/authenticated-navigation';
 import DashboardSidebar from '@/components/ui/dashboard-sidebar';
 import { useTranslation } from '@/hooks/use-translation';
 import { apiClient, getCurrentUser, isAuthenticated } from '@/lib/api';
+import { trackHome } from '@/lib/accessibility-tracks';
 import { useRouter } from 'next/navigation';
 import { OnboardingTour } from '@/components/OnboardingTour';
 import { Hero } from '@/components/ui/hero';
@@ -116,6 +117,9 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push('/auth'); return; }
     if (currentUser?.role !== 'student') { router.push('/auth'); return; }
+    // Differently-abled students belong on their track dashboard.
+    const myTrack = (currentUser as any)?.accessibility_track;
+    if (myTrack === 'visual' || myTrack === 'hearing') { router.push(trackHome(myTrack)); return; }
     if (!dashboardData && !error) { fetchDashboardStats(); }
   }, [router, currentUser?.role]);
 

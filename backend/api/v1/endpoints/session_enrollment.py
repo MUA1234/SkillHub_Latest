@@ -12,6 +12,8 @@ import uuid
 from database.database import get_db
 from core.security import get_current_active_user
 from database.models import User
+from database.supabase_client import SupabaseREST
+from services import track_matching
 
 router = APIRouter()
 
@@ -48,7 +50,22 @@ async def request_session_enrollment(
         
         session = session_response.json()[0]
         teacher_id = session['teacher_id']
-        
+
+        # Hard wall: a student may only enroll with a teacher on a matching
+        # accessibility track. live_sessions.teacher_id is a teacher_profiles id,
+        # so resolve the owning user first.
+        teacher_profile = SupabaseREST.select_one(
+            "teacher_profiles", "user_id", {"id": teacher_id}
+        )
+        teacher_uid = teacher_profile.get("user_id") if teacher_profile else None
+        if teacher_uid and not track_matching.teacher_can_see_student(
+            teacher_uid, str(current_user.id)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This session isn't available for your accessibility track.",
+            )
+
         enrollment_url = f"{settings.supabase_url}/rest/v1/live_live_session_enrollment_requests"
         check_response = requests.get(
             enrollment_url,

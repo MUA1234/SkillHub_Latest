@@ -28,6 +28,12 @@ export interface User {
   created_at: string;
   updated_at: string;
   profile?: UserProfile;
+  // Accessibility-track enrichment from login / /me.
+  // Students: `accessibility_track` = their primary track (landing dashboard).
+  // Teachers: `teaching_tracks` + `verified_specialist`.
+  accessibility_track?: "visual" | "hearing" | null;
+  teaching_tracks?: string[] | null;
+  verified_specialist?: boolean | null;
 }
 
 export interface UserProfile {
@@ -308,6 +314,67 @@ class APIClient {
 
   async getCurrentUser(): Promise<User> {
     return this.request<User>("/api/v1/auth/me");
+  }
+
+  /** Persist a student's disability profile (drives tracks + the data wall).
+   *  Requires an authenticated session. */
+  async saveDisabilityProfile(payload: {
+    has_disability: boolean;
+    disability_types: string[];
+    primary_disability?: string | null;
+    severity_levels?: Record<string, string>;
+    onboarding_completed?: boolean;
+    [k: string]: any;
+  }): Promise<{ success: boolean; message?: string }> {
+    return this.request("/api/v1/accessibility/disability-profile", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /** Get a presigned PUT URL and upload a large media file directly to R2,
+   *  bypassing the API server. Returns the stored object key to persist. */
+  async uploadMediaToR2(
+    file: File,
+    kind: "media" | "recording" | "caption" | "audio" = "media",
+  ): Promise<{ key: string }> {
+    const presign = await this.request<{ upload_url: string; key: string; headers: Record<string, string> }>(
+      "/api/v1/uploads/presign",
+      {
+        method: "POST",
+        body: JSON.stringify({ filename: file.name, content_type: file.type, kind }),
+      },
+    );
+    const put = await fetch(presign.upload_url, {
+      method: "PUT",
+      headers: presign.headers,
+      body: file,
+    });
+    if (!put.ok) throw new Error(`Direct upload failed (${put.status})`);
+    return { key: presign.key };
+  }
+
+  /** Mint a short-lived playback URL for a stored R2 object key. */
+  async getMediaUrl(key: string): Promise<string> {
+    const res = await this.request<{ url: string }>("/api/v1/uploads/media-url", {
+      method: "POST",
+      body: JSON.stringify({ key }),
+    });
+    return res.url;
+  }
+
+  /** Persist a teacher's specialization; `disability_experience` determines the
+   *  teacher's teaching tracks server-side. Requires an authenticated session. */
+  async saveTeacherSpecialization(payload: {
+    specializations: string[];
+    disability_experience: string[];
+    accepts_iep_students?: boolean;
+    [k: string]: any;
+  }): Promise<{ success: boolean; message?: string }> {
+    return this.request("/api/v1/accessibility/teacher-specialization", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   }
 
   async refreshToken(): Promise<{ access_token: string; token_type: string }> {

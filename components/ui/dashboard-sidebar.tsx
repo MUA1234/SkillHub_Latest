@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
   BookOpen,
@@ -36,6 +36,8 @@ import {
   Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getCurrentUser } from "@/lib/api";
+import { trackHome } from "@/lib/accessibility-tracks";
 
 type Role = "student" | "teacher" | "sponsor";
 
@@ -160,10 +162,45 @@ function SidebarNav({
 
 const scrollStorageKey = (role: Role) => `dashboard-sidebar-scroll:${role}`;
 
+/**
+ * Track-aware sidebar links. Reads the current user after mount (so SSR still
+ * renders the base links and there's no hydration mismatch):
+ *  - a differently-abled student's "Dashboard" points at their track dashboard
+ *  - a specialist teacher gets an extra "Specialist Hub" entry
+ */
+function useTrackAwareLinks(role: Role): SidebarLink[] {
+  const [user, setUser] = useState<any>(null);
+  useEffect(() => {
+    try { setUser(getCurrentUser()); } catch { /* ignore */ }
+  }, []);
+  return useMemo(() => {
+    const base = links[role] || [];
+    if (!user) return base;
+    const track = user.accessibility_track;
+    if (role === "student" && (track === "visual" || track === "hearing")) {
+      return base.map((l) =>
+        l.href === "/students/dashboard" ? { ...l, href: trackHome(track) } : l,
+      );
+    }
+    const teaching = Array.isArray(user.teaching_tracks) ? user.teaching_tracks : [];
+    if (role === "teacher" && teaching.some((t: string) => t === "visual" || t === "hearing")) {
+      const idx = base.findIndex((l) => l.href === "/teachers/dashboard");
+      const copy = [...base];
+      copy.splice(idx + 1, 0, {
+        label: "Specialist Hub",
+        href: "/teachers/specialist/dashboard",
+        icon: Sparkles,
+      });
+      return copy;
+    }
+    return base;
+  }, [role, user]);
+}
+
 export default function DashboardSidebar({ userRole }: DashboardSidebarProps) {
   const pathname = usePathname();
   const accent = roleAccent[userRole];
-  const items = links[userRole] || [];
+  const items = useTrackAwareLinks(userRole);
   const [open, setOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 

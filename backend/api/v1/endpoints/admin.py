@@ -698,3 +698,45 @@ async def teacher_earnings_summary(
         "outstanding": outstanding,
         "payouts": payouts,
     }
+
+
+class VerifySpecialistRequest(BaseModel):
+    teacher_user_id: str
+    verified: bool = True
+
+
+@router.post("/teachers/verify-specialist")
+async def set_verified_specialist(
+    payload: VerifySpecialistRequest = Body(...),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Grant/revoke the 'verified specialist' badge on a teacher's
+    accessibility specialization. Admin only.
+
+    `teacher_specializations.teacher_id` references teacher_profiles(id), so we
+    resolve the teacher's profile from their user id first.
+    """
+    _require_admin(current_user)
+
+    profile = SupabaseREST.select_one(
+        "teacher_profiles", "id", {"user_id": payload.teacher_user_id}
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Teacher profile not found.")
+
+    updated = SupabaseREST.update(
+        "teacher_specializations",
+        {
+            "verified_specialist": payload.verified,
+            "verification_date": _now_iso() if payload.verified else None,
+            "verified_by": str(current_user.id),
+        },
+        {"teacher_id": profile["id"]},
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=404,
+            detail="This teacher has no specialization profile to verify yet.",
+        )
+
+    return {"success": True, "verified_specialist": payload.verified}

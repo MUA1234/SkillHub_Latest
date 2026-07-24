@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getCurrentUser, isAuthenticated } from '@/lib/api';
+import { homeForUser } from '@/lib/accessibility-tracks';
 import { Hero } from '@/components/ui/hero';
 import { KidCard, KidFeatureCard } from '@/components/ui/kid-card';
 import { StatPill } from '@/components/ui/stat-pill';
@@ -20,13 +21,6 @@ import {
   Users, Trophy, BookOpen, Globe2, Play, ShieldCheck,
 } from 'lucide-react';
 
-const ROLE_HOMES: Record<string, string> = {
-  student:  '/students/dashboard',
-  teacher:  '/teachers/dashboard',
-  sponsor:  '/sponsors/dashboard',
-  guardian: '/guardian/dashboard',
-  admin:    '/admin/dashboard',
-};
 
 export default function RootPage() {
   const router = useRouter();
@@ -36,8 +30,7 @@ export default function RootPage() {
     if (isAuthenticated()) {
       try {
         const u = getCurrentUser() as any;
-        const role = u?.role || 'student';
-        router.replace(ROLE_HOMES[role] || '/students/dashboard');
+        router.replace(homeForUser(u));
         return;
       } catch {
         router.replace('/auth');

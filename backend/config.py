@@ -10,9 +10,17 @@ _DEFAULT_DEV_SECRET_KEYS = {
     "",
 }
 
+# Load secrets from backend/.env (gitignored). Real environment variables — e.g.
+# those Railway/Vercel inject in production — take precedence over the file.
+_ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+
 
 class Settings(BaseSettings):
-    model_config = {"extra": "allow"}
+    model_config = {
+        "extra": "allow",
+        "env_file": _ENV_FILE,
+        "env_file_encoding": "utf-8",
+    }
 
     database_url: str = "postgresql://postgres:MUAmusic1234%23%40@db.juwpzzkuyqygcjrubqpt.supabase.co:5432/postgres"
     database_pool_url: str = "postgresql://postgres.juwpzzkuyqygcjrubqpt:MUAmusic1234%23%40@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
@@ -26,6 +34,22 @@ class Settings(BaseSettings):
     supabase_url: str = os.getenv("SUPABASE_URL", "https://juwpzzkuyqygcjrubqpt.supabase.co")
     supabase_key: str = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1d3B6emt1eXF5Z2NqcnVicXB0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0OTkyOTgsImV4cCI6MjA4NDA3NTI5OH0.aYy7VG-Q1Yon9mOgucL8EDbefs0GyfD7HbWDCDrirA4")
     supabase_service_key: Optional[str] = os.getenv("SUPABASE_SERVICE_KEY", None)
+
+    # Cloudflare R2 (S3-compatible) — heavy video/audio storage with zero egress.
+    # Secrets come from backend/.env (gitignored); never hardcode them here.
+    r2_endpoint: Optional[str] = os.getenv("R2_ENDPOINT", None)
+    r2_access_key_id: Optional[str] = os.getenv("R2_ACCESS_KEY_ID", None)
+    r2_secret_access_key: Optional[str] = os.getenv("R2_SECRET_ACCESS_KEY", None)
+    r2_bucket: str = os.getenv("R2_BUCKET", "skillhub-media")
+    r2_presign_expiry: int = int(os.getenv("R2_PRESIGN_EXPIRY", "3600"))
+
+    @property
+    def r2_enabled(self) -> bool:
+        return bool(
+            (self.r2_endpoint or "").strip()
+            and (self.r2_access_key_id or "").strip()
+            and (self.r2_secret_access_key or "").strip()
+        )
 
     secret_key: str = os.getenv("SECRET_KEY", "skillhub_super_secret_key_2024_production_change_in_production")
     algorithm: str = os.getenv("ALGORITHM", "HS256")

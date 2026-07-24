@@ -345,6 +345,13 @@ except Exception as e:
     logger.error(f"❌ Failed to load impact routes: {e}")
 
 try:
+    from api.v1.endpoints.uploads import router as uploads_router
+    api_router.include_router(uploads_router, prefix="/uploads", tags=["uploads"])
+    logger.info("✅ Upload (R2 presign) routes loaded")
+except Exception as e:
+    logger.error(f"❌ Failed to load upload routes: {e}")
+
+try:
     from api.v1.endpoints.groups import router as groups_router
     api_router.include_router(groups_router, tags=["groups"])
     logger.info("✅ Group routes loaded")

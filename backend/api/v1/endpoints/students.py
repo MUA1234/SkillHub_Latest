@@ -10,6 +10,7 @@ from database.supabase_client import SupabaseREST
 from database.supabase_async import SupabaseRESTAsync
 from core.security import get_current_active_user
 from services.receipt_service import receipt_generator
+from services import track_matching
 from config import settings
 
 router = APIRouter()
@@ -500,8 +501,15 @@ async def find_teachers(
                 "specialization_match_score": round(match_score, 1) if match_score > 0 else None
             })
 
+        # Hard wall: a differently-abled student is only ever shown specialist
+        # teachers whose tracks overlap theirs; a normal student is only shown
+        # normal teachers. Authoritative over the soft match-score logic above.
+        teacher_list = track_matching.filter_teachers_for_student(
+            teacher_list, str(current_user.id), id_key="user_id"
+        )
+
         teacher_list.sort(key=lambda x: (x["specialization_match_score"] or 0, x["average_rating"] or 0), reverse=True)
-        
+
         total = len(teacher_list)
         teacher_list = teacher_list[offset:offset + limit]
 
