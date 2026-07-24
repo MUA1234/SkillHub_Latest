@@ -46,7 +46,12 @@ interface TrackFieldProps {
 function TrackFileField({ kind, value, onChange, placeholder, acceptAttr }: TrackFieldProps) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [speed, setSpeed] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const onProg = (pct: number, bps?: number) => {
+    setProgress(pct);
+    if (bps != null) setSpeed(bps);
+  };
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,6 +60,7 @@ function TrackFileField({ kind, value, onChange, placeholder, acceptAttr }: Trac
     setUploadError(null);
     setUploading(true);
     setProgress(0);
+    setSpeed(0);
     try {
       const form = new FormData();
       form.append('track_type', kind);
@@ -62,7 +68,7 @@ function TrackFileField({ kind, value, onChange, placeholder, acceptAttr }: Trac
       const json: any = await apiClient.uploadFormWithProgress(
         '/api/v1/teachers/accessibility-tracks/upload',
         form,
-        setProgress,
+        onProg,
       );
       if (json?.url) {
         onChange(json.url);
@@ -113,7 +119,7 @@ function TrackFileField({ kind, value, onChange, placeholder, acceptAttr }: Trac
         )}
         {uploadError && <span className="text-xs text-coral-400">{uploadError}</span>}
       </div>
-      {uploading && <UploadProgress value={progress} label="Uploading" />}
+      {uploading && <UploadProgress value={progress} speed={speed} label="Uploading" />}
     </div>
   );
 }

@@ -184,6 +184,33 @@ export interface SponsorAnalyticsParams {
   time_range?: string;
 }
 
+/**
+ * Wire an XHR's upload progress to a callback that receives percent (0–100) and
+ * a periodically-updated instantaneous speed in bytes/sec. Speed is sampled at
+ * most ~5×/sec so the readout is stable rather than jittery.
+ */
+function attachUploadProgress(
+  xhr: XMLHttpRequest,
+  onProgress?: (percent: number, bytesPerSecond?: number) => void,
+) {
+  if (!onProgress) return;
+  let lastLoaded = 0;
+  let lastTime = Date.now();
+  xhr.upload.onprogress = (e) => {
+    if (!e.lengthComputable) return;
+    const percent = Math.round((e.loaded / e.total) * 100);
+    const now = Date.now();
+    const dt = (now - lastTime) / 1000;
+    let bps: number | undefined;
+    if (dt >= 0.2) {
+      bps = (e.loaded - lastLoaded) / dt;
+      lastLoaded = e.loaded;
+      lastTime = now;
+    }
+    onProgress(percent, bps);
+  };
+}
+
 class APIClient {
   private baseURL: string;
   private token: string | null = null;
@@ -337,7 +364,7 @@ class APIClient {
   async uploadMediaToR2(
     file: File,
     kind: "media" | "recording" | "caption" | "audio" = "media",
-    onProgress?: (percent: number) => void,
+    onProgress?: (percent: number, bytesPerSecond?: number) => void,
   ): Promise<{ key: string }> {
     const presign = await this.request<{ upload_url: string; key: string; headers: Record<string, string> }>(
       "/api/v1/uploads/presign",
@@ -346,14 +373,12 @@ class APIClient {
         body: JSON.stringify({ filename: file.name, content_type: file.type, kind }),
       },
     );
-    // XHR (not fetch) so we can report real upload progress to the caller.
+    // XHR (not fetch) so we can report real upload progress + speed.
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", presign.upload_url);
       Object.entries(presign.headers || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v));
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-      };
+      attachUploadProgress(xhr, onProgress);
       xhr.onload = () =>
         xhr.status >= 200 && xhr.status < 300
           ? resolve()
@@ -370,16 +395,14 @@ class APIClient {
   async uploadFormWithProgress<T = any>(
     endpoint: string,
     formData: FormData,
-    onProgress?: (percent: number) => void,
+    onProgress?: (percent: number, bytesPerSecond?: number) => void,
   ): Promise<T> {
     const token = this.ensureToken();
     return new Promise<T>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${this.baseURL}${endpoint}`);
       if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-      };
+      attachUploadProgress(xhr, onProgress);
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           onProgress?.(100);

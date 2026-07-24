@@ -1069,7 +1069,8 @@ async def upload_course_content(
             "order_index": order_index,
             "is_downloadable": is_downloadable,
             "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            # NOTE: course_content has no `updated_at` column — including it makes
+            # PostgREST reject the whole insert (PGRST204).
             "target_disability_types": disability_types_list,
             "is_accessible_for_all": is_accessible_for_all,
             "requires_vision": requires_vision,
@@ -1223,7 +1224,8 @@ async def update_content_accessibility_tracks(
 
     await SupabaseRESTAsync.update(
         "course_content",
-        {**updates, **derived, "updated_at": datetime.utcnow().isoformat()},
+        # course_content has no `updated_at` column (PGRST204 if included).
+        {**updates, **derived},
         {"id": content_id},
     )
     return {"success": True, "updated": len(updates)}

@@ -115,7 +115,12 @@ const TeacherContentPage = () => {
   const [error, setError] = useState('');
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState(0);
   const [uploadError, setUploadError] = useState('');
+  const onUploadProgress = (pct: number, bps?: number) => {
+    setUploadProgress(pct);
+    if (bps != null) setUploadSpeed(bps);
+  };
   const [createFolderLoading, setCreateFolderLoading] = useState(false);
   const [createFolderError, setCreateFolderError] = useState('');
 
@@ -276,6 +281,7 @@ const TeacherContentPage = () => {
 
     setUploadLoading(true);
     setUploadProgress(0);
+    setUploadSpeed(0);
     setUploadError('');
 
     try {
@@ -290,7 +296,7 @@ const TeacherContentPage = () => {
         const { key } = await apiClient.uploadMediaToR2(
           file,
           ct === 'audio' ? 'audio' : 'media',
-          setUploadProgress,
+          onUploadProgress,
         );
         formData.append('r2_key', key);
         formData.append('r2_file_size', String(file.size));
@@ -307,7 +313,7 @@ const TeacherContentPage = () => {
       await apiClient.uploadFormWithProgress(
         '/api/v1/teachers/content/upload',
         formData,
-        isMedia ? undefined : setUploadProgress,
+        isMedia ? undefined : onUploadProgress,
       );
 
       setUploadForm({
@@ -984,7 +990,7 @@ const TeacherContentPage = () => {
 
               {uploadLoading && (
                 <div className="pt-2">
-                  <UploadProgress value={uploadProgress} label="Uploading content" />
+                  <UploadProgress value={uploadProgress} speed={uploadSpeed} label="Uploading content" />
                 </div>
               )}
 

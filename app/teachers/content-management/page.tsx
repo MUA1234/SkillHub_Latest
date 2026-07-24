@@ -225,6 +225,11 @@ const ContentManagementPage = () => {
 
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState(0);
+  const onUploadProgress = (pct: number, bps?: number) => {
+    setUploadProgress(pct);
+    if (bps != null) setUploadSpeed(bps);
+  };
   const [bulkUploadLoading, setBulkUploadLoading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
   const [createFolderLoading, setCreateFolderLoading] = useState(false);
@@ -283,8 +288,9 @@ const ContentManagementPage = () => {
     try {
       setUploadLoading(true);
       setUploadProgress(0);
+      setUploadSpeed(0);
 
-      await uploadOneFile(selectedFile, fileData.folder, fileData.title, fileData.description, setUploadProgress);
+      await uploadOneFile(selectedFile, fileData.folder, fileData.title, fileData.description, onUploadProgress);
 
       setIsUploadModalOpen(false);
       setSelectedFile(null);
@@ -938,7 +944,7 @@ const ContentManagementPage = () => {
                 
                 {uploadLoading && (
                   <div className="mb-4">
-                    <UploadProgress value={uploadProgress} label="Uploading content" />
+                    <UploadProgress value={uploadProgress} speed={uploadSpeed} label="Uploading content" />
                   </div>
                 )}
 

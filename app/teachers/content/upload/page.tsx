@@ -58,6 +58,11 @@ const ContentUploadPage = () => {
   const [cognitiveLevel, setCognitiveLevel] = useState(3);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState(0);
+  const onUploadProgress = (pct: number, bps?: number) => {
+    setUploadProgress(pct);
+    if (bps != null) setUploadSpeed(bps);
+  };
 
   useEffect(() => {
     (async () => {
@@ -133,6 +138,7 @@ const ContentUploadPage = () => {
 
     setUploading(true);
     setUploadProgress(0);
+    setUploadSpeed(0);
 
     try {
       const token = localStorage.getItem('access_token');
@@ -150,7 +156,7 @@ const ContentUploadPage = () => {
         const { key } = await apiClient.uploadMediaToR2(
           selectedFile,
           fileData.content_type === 'audio' ? 'audio' : 'media',
-          setUploadProgress,
+          onUploadProgress,
         );
         form.append('r2_key', key);
         form.append('r2_file_size', String(selectedFile.size));
@@ -182,7 +188,7 @@ const ContentUploadPage = () => {
       await apiClient.uploadFormWithProgress(
         '/api/v1/teachers/content/upload',
         form,
-        isMedia ? undefined : setUploadProgress,
+        isMedia ? undefined : onUploadProgress,
       );
 
       router.push('/teachers/content');
@@ -654,7 +660,7 @@ const ContentUploadPage = () => {
 
               {uploading && (
                 <div className="mb-4">
-                  <UploadProgress value={uploadProgress} label="Uploading content" />
+                  <UploadProgress value={uploadProgress} speed={uploadSpeed} label="Uploading content" />
                 </div>
               )}
 
