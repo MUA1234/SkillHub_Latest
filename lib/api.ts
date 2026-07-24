@@ -337,6 +337,7 @@ class APIClient {
   async uploadMediaToR2(
     file: File,
     kind: "media" | "recording" | "caption" | "audio" = "media",
+    onProgress?: (percent: number) => void,
   ): Promise<{ key: string }> {
     const presign = await this.request<{ upload_url: string; key: string; headers: Record<string, string> }>(
       "/api/v1/uploads/presign",
@@ -345,13 +346,62 @@ class APIClient {
         body: JSON.stringify({ filename: file.name, content_type: file.type, kind }),
       },
     );
-    const put = await fetch(presign.upload_url, {
-      method: "PUT",
-      headers: presign.headers,
-      body: file,
+    // XHR (not fetch) so we can report real upload progress to the caller.
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", presign.upload_url);
+      Object.entries(presign.headers || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () =>
+        xhr.status >= 200 && xhr.status < 300
+          ? resolve()
+          : reject(new Error(`Direct upload failed (${xhr.status})`));
+      xhr.onerror = () => reject(new Error("Network error during upload"));
+      xhr.send(file);
     });
-    if (!put.ok) throw new Error(`Direct upload failed (${put.status})`);
+    onProgress?.(100);
     return { key: presign.key };
+  }
+
+  /** POST a FormData (with a file) to the backend while reporting upload
+   *  progress — a fetch replacement for uploads that need a progress bar. */
+  async uploadFormWithProgress<T = any>(
+    endpoint: string,
+    formData: FormData,
+    onProgress?: (percent: number) => void,
+  ): Promise<T> {
+    const token = this.ensureToken();
+    return new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${this.baseURL}${endpoint}`);
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(100);
+          try {
+            resolve(xhr.responseText ? (JSON.parse(xhr.responseText) as T) : ({} as T));
+          } catch {
+            resolve({} as T);
+          }
+        } else {
+          let msg = `Upload failed (${xhr.status})`;
+          try {
+            const d = JSON.parse(xhr.responseText);
+            msg = d.detail || d.message || msg;
+          } catch {
+            /* keep default */
+          }
+          reject(new Error(msg));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Network error during upload"));
+      xhr.send(formData);
+    });
   }
 
   /** Mint a short-lived playback URL for a stored R2 object key. */

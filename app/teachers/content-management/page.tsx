@@ -8,6 +8,7 @@ import DashboardSidebar from '@/components/ui/dashboard-sidebar';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { apiClient, getCurrentUser, isAuthenticated } from '@/lib/api';
+import { UploadProgress } from '@/components/ui/upload-progress';
 import {
   FileText,
   Upload,
@@ -223,31 +224,42 @@ const ContentManagementPage = () => {
   };
 
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [bulkUploadLoading, setBulkUploadLoading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
   const [createFolderLoading, setCreateFolderLoading] = useState(false);
 
-  const uploadOneFile = async (file: File, courseId: string, title: string, description: string) => {
+  const uploadOneFile = async (
+    file: File,
+    courseId: string,
+    title: string,
+    description: string,
+    onProgress?: (pct: number) => void,
+  ) => {
+    const ct = inferContentType(file);
+    const isMedia = ct === 'video' || ct === 'audio';
     const formData = new FormData();
-    formData.append('file', file);
+
+    // Video/audio upload straight to R2 (fast + progress); others via the file.
+    if (isMedia) {
+      const { key } = await apiClient.uploadMediaToR2(file, ct === 'audio' ? 'audio' : 'media', onProgress);
+      formData.append('r2_key', key);
+      formData.append('r2_file_size', String(file.size));
+    } else {
+      formData.append('file', file);
+    }
     formData.append('course_id', courseId);
     formData.append('title', title);
     formData.append('description', description || '');
-    formData.append('content_type', inferContentType(file));
+    formData.append('content_type', ct);
     formData.append('access_level', 'free');
     formData.append('is_downloadable', 'true');
 
-    const token = localStorage.getItem('access_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/teachers/content/upload`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `Upload failed for "${file.name}"`);
-    }
-    return response.json();
+    return apiClient.uploadFormWithProgress(
+      '/api/v1/teachers/content/upload',
+      formData,
+      isMedia ? undefined : onProgress,
+    );
   };
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
@@ -270,8 +282,9 @@ const ContentManagementPage = () => {
 
     try {
       setUploadLoading(true);
+      setUploadProgress(0);
 
-      await uploadOneFile(selectedFile, fileData.folder, fileData.title, fileData.description);
+      await uploadOneFile(selectedFile, fileData.folder, fileData.title, fileData.description, setUploadProgress);
 
       setIsUploadModalOpen(false);
       setSelectedFile(null);
@@ -306,10 +319,15 @@ const ContentManagementPage = () => {
 
     try {
       setBulkUploadLoading(true);
+      setBulkProgress(0);
 
+      let done = 0;
       const results = await Promise.allSettled(
         bulkFiles.map((file) =>
-          uploadOneFile(file, bulkUploadCourseId, file.name.replace(/\.[^/.]+$/, ''), '')
+          uploadOneFile(file, bulkUploadCourseId, file.name.replace(/\.[^/.]+$/, ''), '').finally(() => {
+            done += 1;
+            setBulkProgress(Math.round((done / bulkFiles.length) * 100));
+          })
         )
       );
       const failed = results.filter((r) => r.status === 'rejected').length;
@@ -918,19 +936,27 @@ const ContentManagementPage = () => {
                   </div>
                 </div>
                 
+                {uploadLoading && (
+                  <div className="mb-4">
+                    <UploadProgress value={uploadProgress} label="Uploading content" />
+                  </div>
+                )}
+
                 <div className="flex justify-end space-x-3">
                   <button
                     type="button"
                     onClick={() => setIsUploadModalOpen(false)}
-                    className="px-6 py-3 bg-cream-100 text-espresso rounded-lg hover:bg-cream-300"
+                    disabled={uploadLoading}
+                    className="px-6 py-3 bg-cream-100 text-espresso rounded-lg hover:bg-cream-300 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-3 bg-teacher-600 text-white rounded-lg hover:bg-teacher-700"
+                    disabled={uploadLoading}
+                    className="px-6 py-3 bg-teacher-600 text-white rounded-lg hover:bg-teacher-700 disabled:opacity-50"
                   >
-                    Upload Content
+                    {uploadLoading ? 'Uploading…' : 'Upload Content'}
                   </button>
                 </div>
               </form>
@@ -1061,24 +1087,31 @@ const ContentManagementPage = () => {
                   )}
                 </div>
                 
+                {bulkUploadLoading && (
+                  <div className="mb-4">
+                    <UploadProgress value={bulkProgress} label={`Uploading ${bulkFiles.length} files`} />
+                  </div>
+                )}
+
                 <div className="flex justify-end space-x-3">
                   <button
                     type="button"
                     onClick={() => setIsBulkUploadModalOpen(false)}
-                    className="px-6 py-3 bg-cream-100 text-espresso rounded-lg hover:bg-cream-300"
+                    disabled={bulkUploadLoading}
+                    className="px-6 py-3 bg-cream-100 text-espresso rounded-lg hover:bg-cream-300 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={bulkFiles.length === 0}
+                    disabled={bulkFiles.length === 0 || bulkUploadLoading}
                     className={`px-6 py-3 rounded-lg ${
-                      bulkFiles.length === 0 
-                        ? 'bg-cream-300 text-espresso/55 cursor-not-allowed' 
+                      bulkFiles.length === 0 || bulkUploadLoading
+                        ? 'bg-cream-300 text-espresso/55 cursor-not-allowed'
                         : 'bg-teacher-600 text-white hover:bg-teacher-700'
                     }`}
                   >
-                    Upload All Files
+                    {bulkUploadLoading ? 'Uploading…' : 'Upload All Files'}
                   </button>
                 </div>
               </form>

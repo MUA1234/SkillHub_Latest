@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Hand, Headphones, Subtitles, FileText, CheckCircle2, Upload, Loader2 } from 'lucide-react';
 import { apiClient, getCurrentUser } from '@/lib/api';
+import { UploadProgress } from '@/components/ui/upload-progress';
 
 type TrackKind = 'caption' | 'transcript' | 'audio' | 'sign_video';
 
@@ -44,6 +45,7 @@ interface TrackFieldProps {
  *  manual URL entry if the upload fails so we never strand a teacher. */
 function TrackFileField({ kind, value, onChange, placeholder, acceptAttr }: TrackFieldProps) {
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -52,24 +54,16 @@ function TrackFileField({ kind, value, onChange, placeholder, acceptAttr }: Trac
     if (!file) return;
     setUploadError(null);
     setUploading(true);
+    setProgress(0);
     try {
       const form = new FormData();
       form.append('track_type', kind);
       form.append('file', file);
-      const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : '';
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/teachers/accessibility-tracks/upload`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: form,
-        },
+      const json: any = await apiClient.uploadFormWithProgress(
+        '/api/v1/teachers/accessibility-tracks/upload',
+        form,
+        setProgress,
       );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `Upload failed (${res.status})`);
-      }
-      const json = await res.json();
       if (json?.url) {
         onChange(json.url);
       } else {
@@ -119,6 +113,7 @@ function TrackFileField({ kind, value, onChange, placeholder, acceptAttr }: Trac
         )}
         {uploadError && <span className="text-xs text-coral-400">{uploadError}</span>}
       </div>
+      {uploading && <UploadProgress value={progress} label="Uploading" />}
     </div>
   );
 }

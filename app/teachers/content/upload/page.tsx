@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { UploadProgress } from '@/components/ui/upload-progress';
 import {
   FileText,
   Upload,
@@ -56,6 +57,7 @@ const ContentUploadPage = () => {
   const [requiresHearing, setRequiresHearing] = useState(true);
   const [cognitiveLevel, setCognitiveLevel] = useState(3);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -130,6 +132,7 @@ const ContentUploadPage = () => {
     }
 
     setUploading(true);
+    setUploadProgress(0);
 
     try {
       const token = localStorage.getItem('access_token');
@@ -143,9 +146,11 @@ const ContentUploadPage = () => {
       // send only the object key. Images/documents keep the direct-file path.
       const isMedia = fileData.content_type === 'video' || fileData.content_type === 'audio';
       if (isMedia) {
+        // Big video/audio → the R2 PUT drives the progress bar.
         const { key } = await apiClient.uploadMediaToR2(
           selectedFile,
           fileData.content_type === 'audio' ? 'audio' : 'media',
+          setUploadProgress,
         );
         form.append('r2_key', key);
         form.append('r2_file_size', String(selectedFile.size));
@@ -171,19 +176,14 @@ const ContentUploadPage = () => {
       form.append('has_audio_description', String(hasAudioDescription));
       form.append('has_sign_language', String(hasSignLanguage));
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/teachers/content/upload`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: form,
-        },
+      // For images/docs the file rides in this POST, so it drives the bar.
+      // For media the bytes already went to R2; this is just a tiny metadata
+      // POST, so we don't reset the bar (it stays at 100 / "Finishing up…").
+      await apiClient.uploadFormWithProgress(
+        '/api/v1/teachers/content/upload',
+        form,
+        isMedia ? undefined : setUploadProgress,
       );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Upload failed (${response.status})`);
-      }
 
       router.push('/teachers/content');
     } catch (error: any) {
@@ -649,6 +649,12 @@ const ContentUploadPage = () => {
                     {hasAudioDescription && <Badge variant="secondary">Audio Description</Badge>}
                     {hasSignLanguage && <Badge variant="secondary">Sign Language</Badge>}
                   </div>
+                </div>
+              )}
+
+              {uploading && (
+                <div className="mb-4">
+                  <UploadProgress value={uploadProgress} label="Uploading content" />
                 </div>
               )}
 
