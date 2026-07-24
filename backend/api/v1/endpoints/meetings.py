@@ -13,8 +13,39 @@ import uuid
 from database.database import get_db
 from core.security import get_current_active_user
 from database.models import User
+from config import settings
+from services import livekit_service
 
 router = APIRouter()
+
+
+@router.post("/livekit/token")
+async def livekit_token(
+    payload: dict = Body(...),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Return a LiveKit access token + server URL so the caller can join a live
+    video room (room name = live-session id). Any authenticated user may join;
+    finer access control can layer on top later."""
+    if not settings.livekit_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Live video is not configured on the server.",
+        )
+    room = str(payload.get("room") or "").strip()
+    if not room:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing room.")
+
+    identity = str(current_user.id)
+    name = str(payload.get("name") or "").strip() or getattr(current_user, "email", "") or identity
+    try:
+        token = livekit_service.create_token(room=room, identity=identity, name=name)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not create a room token: {exc}",
+        )
+    return {"url": settings.livekit_url, "token": token, "room": room, "identity": identity}
 
 
 @router.post("/rooms")

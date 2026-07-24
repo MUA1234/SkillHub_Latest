@@ -50,3 +50,6 @@ twilio>=9.0,<10.0
 # services/r2_storage.py to mint presigned PUT/GET URLs so large media uploads
 # and playback stream directly browser↔R2, never through the API server.
 boto3>=1.34,<2.0
+
+# LiveKit server SDK — mints room access tokens for live video sessions.
+livekit-api>=0.8,<2.0

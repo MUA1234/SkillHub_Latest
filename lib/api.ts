@@ -446,6 +446,17 @@ class APIClient {
     return contentUrl || "";
   }
 
+  /** Get a LiveKit access token + server URL to join a live video room. */
+  async getLiveKitToken(
+    room: string,
+    name?: string,
+  ): Promise<{ url: string; token: string; room: string; identity: string }> {
+    return this.request("/api/v1/meetings/livekit/token", {
+      method: "POST",
+      body: JSON.stringify({ room, name }),
+    });
+  }
+
   /** Delete a content item (also removes its R2 objects server-side). */
   async deleteContent(contentId: string): Promise<{ success: boolean }> {
     return this.request(`/api/v1/teachers/content/${encodeURIComponent(contentId)}`, {

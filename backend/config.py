@@ -158,6 +158,19 @@ class Settings(BaseSettings):
     anthropic_api_key: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
     anthropic_model: str = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 
+    # LiveKit (live video conferencing). Secrets from env / backend/.env.
+    livekit_url: Optional[str] = os.getenv("LIVEKIT_URL")
+    livekit_api_key: Optional[str] = os.getenv("LIVEKIT_API_KEY")
+    livekit_api_secret: Optional[str] = os.getenv("LIVEKIT_API_SECRET")
+
+    @property
+    def livekit_enabled(self) -> bool:
+        return bool(
+            (self.livekit_url or "").strip()
+            and (self.livekit_api_key or "").strip()
+            and (self.livekit_api_secret or "").strip()
+        )
+
     twilio_account_sid: Optional[str] = os.getenv("TWILIO_ACCOUNT_SID")
     twilio_auth_token: Optional[str] = os.getenv("TWILIO_AUTH_TOKEN")
     twilio_sender: Optional[str] = os.getenv("TWILIO_SENDER")

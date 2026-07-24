@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { JitsiMeeting } from '@/components/meeting/JitsiMeeting';
+import { LiveKitConference } from '@/components/meeting/LiveKitConference';
 import { getCurrentUser, isAuthenticated } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
 
@@ -79,11 +79,9 @@ const TeacherMeetingRoomPage = () => {
   const displayName = `${currentUser?.profile?.first_name || 'Teacher'} ${currentUser?.profile?.last_name || ''}`.trim();
 
   return (
-    <JitsiMeeting
+    <LiveKitConference
       roomId={roomId}
       displayName={displayName}
-      email={currentUser?.email}
-      isHost={true}
       title={meta.title}
       onLeave={handleLeave}
     />
