@@ -363,7 +363,7 @@ class APIClient {
    *  bypassing the API server. Returns the stored object key to persist. */
   async uploadMediaToR2(
     file: File,
-    kind: "media" | "recording" | "caption" | "audio" = "media",
+    kind: "media" | "recording" | "caption" | "audio" | "thumbnail" = "media",
     onProgress?: (percent: number, bytesPerSecond?: number) => void,
   ): Promise<{ key: string }> {
     const presign = await this.request<{ upload_url: string; key: string; headers: Record<string, string> }>(
@@ -427,20 +427,21 @@ class APIClient {
     });
   }
 
-  /** Mint a short-lived playback URL for a stored R2 object key. */
-  async getMediaUrl(key: string): Promise<string> {
+  /** Mint a short-lived URL for a stored R2 object key. `download: true` forces
+   *  a file download (Content-Disposition: attachment) rather than inline play. */
+  async getMediaUrl(key: string, download = false): Promise<string> {
     const res = await this.request<{ url: string }>("/api/v1/uploads/media-url", {
       method: "POST",
-      body: JSON.stringify({ key }),
+      body: JSON.stringify({ key, download }),
     });
     return res.url;
   }
 
-  /** Resolve a stored content_url for playback: `r2://<key>` values become a
-   *  short-lived presigned URL; everything else is returned unchanged. */
-  async resolveMediaUrl(contentUrl: string | null | undefined): Promise<string> {
+  /** Resolve a stored content_url for playback/preview: `r2://<key>` values
+   *  become a short-lived presigned URL; everything else is returned unchanged. */
+  async resolveMediaUrl(contentUrl: string | null | undefined, download = false): Promise<string> {
     if (contentUrl && contentUrl.startsWith("r2://")) {
-      return this.getMediaUrl(contentUrl.slice("r2://".length));
+      return this.getMediaUrl(contentUrl.slice("r2://".length), download);
     }
     return contentUrl || "";
   }

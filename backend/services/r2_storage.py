@@ -77,11 +77,19 @@ def presign_put(key: str, content_type: Optional[str] = None, expires: Optional[
     )
 
 
-def presign_get(key: str, expires: Optional[int] = None) -> str:
-    """Presigned URL for playback/download of a stored object."""
+def presign_get(key: str, expires: Optional[int] = None, as_attachment: bool = False) -> str:
+    """Presigned URL for playback/download of a stored object.
+
+    `as_attachment=True` forces the browser to download (Content-Disposition:
+    attachment) rather than play inline — used by the download button.
+    """
+    params = {"Bucket": settings.r2_bucket, "Key": key}
+    if as_attachment:
+        filename = key.rsplit("/", 1)[-1]
+        params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
     return _client().generate_presigned_url(
         "get_object",
-        Params={"Bucket": settings.r2_bucket, "Key": key},
+        Params=params,
         ExpiresIn=expires or settings.r2_presign_expiry,
     )
 

@@ -39,6 +39,7 @@ class PresignUploadResponse(BaseModel):
 
 class PresignGetRequest(BaseModel):
     key: str
+    download: bool = False
 
 
 @router.post("/presign", response_model=PresignUploadResponse)
@@ -54,10 +55,12 @@ async def presign_upload(
         )
 
     content_type = payload.content_type or r2_storage.guess_content_type(payload.filename)
-    if not r2_storage.is_r2_media(content_type, payload.filename):
+    # Video/audio/captions, plus images (used for content thumbnails/previews).
+    is_allowed = r2_storage.is_r2_media(content_type, payload.filename) or content_type.startswith("image/")
+    if not is_allowed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This endpoint is for video/audio/caption media only.",
+            detail="Only video, audio, caption, or image files are supported.",
         )
 
     key = r2_storage.build_object_key(str(current_user.id), payload.filename, payload.kind)
@@ -91,7 +94,7 @@ async def presign_media_url(
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key.")
     try:
-        return {"url": r2_storage.presign_get(payload.key)}
+        return {"url": r2_storage.presign_get(payload.key, as_attachment=payload.download)}
     except Exception as exc:
         logger.error(f"R2 presign GET failed: {exc}")
         raise HTTPException(

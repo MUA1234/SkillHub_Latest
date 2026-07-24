@@ -981,6 +981,7 @@ async def upload_course_content(
     file: Optional[UploadFile] = File(None),
     r2_key: Optional[str] = Form(None),
     r2_file_size: Optional[int] = Form(None),
+    thumbnail_r2_key: Optional[str] = Form(None),
     target_disability_types: Optional[str] = Form("[]"),
     is_accessible_for_all: bool = Form(True),
     requires_vision: bool = Form(True),
@@ -1068,6 +1069,7 @@ async def upload_course_content(
             "access_level": access_level,
             "order_index": order_index,
             "is_downloadable": is_downloadable,
+            "thumbnail_url": f"r2://{thumbnail_r2_key}" if thumbnail_r2_key else None,
             "created_at": datetime.utcnow().isoformat(),
             # NOTE: course_content has no `updated_at` column — including it makes
             # PostgREST reject the whole insert (PGRST204).

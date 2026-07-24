@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { useTranslation } from '@/hooks/use-translation';
 import { apiClient, getCurrentUser, isAuthenticated } from '@/lib/api';
 import { UploadProgress } from '@/components/ui/upload-progress';
+import { VideoPlayer } from '@/components/content/VideoPlayer';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -33,7 +34,9 @@ import {
   Grid,
   List,
   SortAsc,
-  MoreVertical
+  MoreVertical,
+  Play,
+  X,
 } from 'lucide-react';
 
 interface CourseContent {
@@ -43,6 +46,7 @@ interface CourseContent {
   description?: string;
   content_type: string;
   content_url?: string;
+  thumbnail_url?: string;
   duration?: string;
   file_size?: string;
   access_level: string;
@@ -130,8 +134,15 @@ const TeacherContentPage = () => {
     content_type: 'document',
     access_level: 'free',
     is_downloadable: true,
-    file: null as File | null
+    file: null as File | null,
+    thumbnail: null as File | null,
   });
+
+  // Video player modal + resolved thumbnail previews for the content list.
+  const [playing, setPlaying] = useState<CourseContent | null>(null);
+  const [playingSrc, setPlayingSrc] = useState('');
+  const [playerLoading, setPlayerLoading] = useState(false);
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
 
   const [folderForm, setFolderForm] = useState({
     title: '',
@@ -231,6 +242,59 @@ const TeacherContentPage = () => {
     }
   }, [selectedCourse]);
 
+  // Resolve r2:// thumbnails to presigned image URLs for the list previews.
+  useEffect(() => {
+    const items = contentData?.content_items || [];
+    const toResolve = items.filter(
+      (it) => it.thumbnail_url && it.thumbnail_url.startsWith('r2://') && !thumbUrls[it.id],
+    );
+    if (toResolve.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        toResolve.map(async (it) => {
+          try {
+            return [it.id, await apiClient.resolveMediaUrl(it.thumbnail_url)] as const;
+          } catch {
+            return [it.id, ''] as const;
+          }
+        }),
+      );
+      if (!cancelled) setThumbUrls((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [contentData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Open a video/audio item in the player modal; other types open in a new tab.
+  const openPlayer = async (item: CourseContent) => {
+    if (item.content_type !== 'video' && item.content_type !== 'audio') {
+      const url = await apiClient.resolveMediaUrl(item.content_url);
+      if (url) window.open(url, '_blank');
+      return;
+    }
+    setPlaying(item);
+    setPlayerLoading(true);
+    setPlayingSrc('');
+    try {
+      setPlayingSrc(await apiClient.resolveMediaUrl(item.content_url));
+    } catch {
+      setPlayingSrc('');
+    } finally {
+      setPlayerLoading(false);
+    }
+  };
+
+  const downloadItem = async (item: CourseContent) => {
+    try {
+      const url = await apiClient.resolveMediaUrl(item.content_url, true); // force download
+      if (url) window.open(url, '_blank');
+    } catch {
+      /* ignore */
+    }
+  };
+
   const subjects = ['all', 'Mathematics', 'Physics', 'Chemistry', 'English', 'Biology'];
   const contentTypes = ['all', 'video', 'document', 'image', 'presentation', 'audio'];
 
@@ -303,6 +367,13 @@ const TeacherContentPage = () => {
       } else {
         formData.append('file', file);
       }
+
+      // Optional thumbnail/preview image → R2 (small, quick).
+      if (uploadForm.thumbnail) {
+        const { key: thumbKey } = await apiClient.uploadMediaToR2(uploadForm.thumbnail, 'thumbnail');
+        formData.append('thumbnail_r2_key', thumbKey);
+      }
+
       formData.append('course_id', selectedCourse);
       formData.append('title', uploadForm.title);
       formData.append('description', uploadForm.description || '');
@@ -322,7 +393,8 @@ const TeacherContentPage = () => {
         content_type: 'document',
         access_level: 'free',
         is_downloadable: true,
-        file: null
+        file: null,
+        thumbnail: null,
       });
       setShowUploadModal(false);
       
@@ -407,15 +479,25 @@ const TeacherContentPage = () => {
           whileHover={{ scale: 1.02 }}
           className="bg-cream-50 rounded-2xl border-2 border-espresso/10 shadow-kid border border-espresso/15 overflow-hidden hover:shadow-md transition-shadow"
         >
-          <div className="aspect-video bg-cream-100 flex items-center justify-center">
-            {item.content_type === 'video' ? (
-              <Video className="w-full h-full object-cover" />
-            ) : item.content_type === 'image' ? (
-              <ImageIcon className="w-full h-full object-cover" />
+          <button
+            type="button"
+            onClick={() => openPlayer(item)}
+            className="relative aspect-video w-full bg-cream-100 flex items-center justify-center overflow-hidden group"
+            title={item.content_type === 'video' || item.content_type === 'audio' ? 'Play' : 'Open'}
+          >
+            {thumbUrls[item.id] ? (
+              <img src={thumbUrls[item.id]} alt={item.title} className="w-full h-full object-cover" />
             ) : (
               getTypeIcon(item.content_type)
             )}
-          </div>
+            {(item.content_type === 'video' || item.content_type === 'audio') && (
+              <span className="absolute inset-0 flex items-center justify-center bg-espresso/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="grid place-items-center w-14 h-14 rounded-full bg-cream/90 text-espresso shadow-sticker-sm">
+                  <Play className="w-6 h-6 ml-0.5" />
+                </span>
+              </span>
+            )}
+          </button>
           <div className="p-4">
             <h3 className="font-semibold text-espresso mb-2 truncate">{item.title}</h3>
             <p className="text-sm text-espresso/70 mb-3 line-clamp-2">{item.description}</p>
@@ -431,12 +513,14 @@ const TeacherContentPage = () => {
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <button className="p-1 text-espresso/45 hover:text-terracotta">
+                <button onClick={() => openPlayer(item)} title="Play / open" className="p-1 text-espresso/45 hover:text-terracotta">
                   <Eye className="w-4 h-4" />
                 </button>
-                <button className="p-1 text-espresso/45 hover:text-forest">
-                  <Download className="w-4 h-4" />
-                </button>
+                {item.is_downloadable && (
+                  <button onClick={() => downloadItem(item)} title="Download" className="p-1 text-espresso/45 hover:text-forest">
+                    <Download className="w-4 h-4" />
+                  </button>
+                )}
                 <button className="p-1 text-espresso/45 hover:text-mustard-500">
                   <Star className="w-4 h-4" />
                 </button>
@@ -487,7 +571,21 @@ const TeacherContentPage = () => {
               <tr key={item.id} className="hover:bg-cream-100">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
-                    {getTypeIcon(item.content_type)}
+                    <button
+                      type="button"
+                      onClick={() => openPlayer(item)}
+                      className="relative shrink-0 w-16 h-10 rounded-md overflow-hidden bg-cream-100 grid place-items-center group"
+                      title="Play / open"
+                    >
+                      {thumbUrls[item.id] ? (
+                        <img src={thumbUrls[item.id]} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="scale-[0.55]">{getTypeIcon(item.content_type)}</span>
+                      )}
+                      {(item.content_type === 'video' || item.content_type === 'audio') && (
+                        <Play className="absolute w-4 h-4 text-cream drop-shadow opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </button>
                     <div className="ml-3">
                       <div className="text-sm font-medium text-espresso">{item.title}</div>
                       <div className="text-sm text-espresso/55 truncate max-w-xs">{item.description}</div>
@@ -510,12 +608,14 @@ const TeacherContentPage = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex space-x-2">
-                    <button className="text-terracotta hover:text-terracotta-700">
+                    <button onClick={() => openPlayer(item)} title="Play / open" className="text-terracotta hover:text-terracotta-700">
                       <Eye className="w-4 h-4" />
                     </button>
-                    <button className="text-forest hover:text-forest-500">
-                      <Download className="w-4 h-4" />
-                    </button>
+                    {item.is_downloadable && (
+                      <button onClick={() => downloadItem(item)} title="Download" className="text-forest hover:text-forest-500">
+                        <Download className="w-4 h-4" />
+                      </button>
+                    )}
                     <button className="text-espresso/70 hover:text-espresso">
                       <Edit className="w-4 h-4" />
                     </button>
@@ -988,6 +1088,29 @@ const TeacherContentPage = () => {
                 )}
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-espresso mb-2">
+                  Thumbnail / preview image <span className="text-espresso/45">(optional)</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setUploadForm({ ...uploadForm, thumbnail: e.target.files?.[0] || null })}
+                  className="w-full px-3 py-2 bg-cream-100 border-2 border-espresso/15 rounded-xl text-espresso focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta outline-none transition"
+                />
+                {uploadForm.thumbnail && (
+                  <div className="mt-2 flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={URL.createObjectURL(uploadForm.thumbnail)}
+                      alt="thumbnail preview"
+                      className="w-24 h-14 object-cover rounded-md border border-espresso/15"
+                    />
+                    <span className="text-sm text-espresso/70">{uploadForm.thumbnail.name}</span>
+                  </div>
+                )}
+              </div>
+
               {uploadLoading && (
                 <div className="pt-2">
                   <UploadProgress value={uploadProgress} speed={uploadSpeed} label="Uploading content" />
@@ -1006,7 +1129,8 @@ const TeacherContentPage = () => {
                       content_type: 'document',
                       access_level: 'free',
                       is_downloadable: true,
-                      file: null
+                      file: null,
+                      thumbnail: null,
                     });
                   }}
                   className="px-4 py-2 text-espresso bg-cream-300 rounded-lg hover:bg-cream-300"
@@ -1172,6 +1296,54 @@ const TeacherContentPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Video / audio player modal */}
+      {playing && (
+        <div
+          className="fixed inset-0 z-50 bg-espresso/70 flex items-center justify-center p-4"
+          onClick={() => { setPlaying(null); setPlayingSrc(''); }}
+        >
+          <div
+            className="bg-cream-50 rounded-2xl shadow-xl w-full max-w-4xl max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-espresso/10">
+              <h2 className="font-semibold text-espresso truncate">{playing.title}</h2>
+              <div className="flex items-center gap-2 shrink-0">
+                {playing.is_downloadable && (
+                  <button
+                    onClick={() => downloadItem(playing)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-forest text-cream border-2 border-espresso shadow-sticker-sm hover:-translate-y-0.5 transition-transform"
+                  >
+                    <Download className="w-4 h-4" /> Download
+                  </button>
+                )}
+                <button
+                  onClick={() => { setPlaying(null); setPlayingSrc(''); }}
+                  className="p-2 text-espresso/55 hover:text-espresso"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-4">
+              {playerLoading || !playingSrc ? (
+                <div className="aspect-video grid place-items-center bg-espresso/5 rounded-xl text-espresso/50 text-sm">
+                  Loading…
+                </div>
+              ) : (
+                <VideoPlayer
+                  src={playingSrc}
+                  title={playing.title}
+                  poster={thumbUrls[playing.id]}
+                  initialAudioOnly={playing.content_type === 'audio'}
+                />
+              )}
+            </div>
           </div>
         </div>
       )}
