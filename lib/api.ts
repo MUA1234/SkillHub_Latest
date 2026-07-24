@@ -446,6 +446,24 @@ class APIClient {
     return contentUrl || "";
   }
 
+  /** Delete a content item (also removes its R2 objects server-side). */
+  async deleteContent(contentId: string): Promise<{ success: boolean }> {
+    return this.request(`/api/v1/teachers/content/${encodeURIComponent(contentId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  /** Update a content item's editable details (title, description, access level, …). */
+  async updateContentItem(
+    contentId: string,
+    updates: Record<string, any>,
+  ): Promise<{ success: boolean; updated: number }> {
+    return this.request(`/api/v1/teachers/content/${encodeURIComponent(contentId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    });
+  }
+
   /** Persist a teacher's specialization; `disability_experience` determines the
    *  teacher's teaching tracks server-side. Requires an authenticated session. */
   async saveTeacherSpecialization(payload: {

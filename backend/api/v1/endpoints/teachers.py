@@ -1233,6 +1233,60 @@ async def update_content_accessibility_tracks(
     return {"success": True, "updated": len(updates)}
 
 
+async def _assert_owns_content(content_id: str, current_user: User) -> dict:
+    """Fetch a content row and 404/403 unless it belongs to the caller."""
+    content = await SupabaseRESTAsync.select_one(
+        "course_content", "id,course_id,content_url,thumbnail_url", {"id": content_id}
+    )
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found.")
+    course = await SupabaseRESTAsync.select_one(
+        "courses", "teacher_id", {"id": str(content["course_id"])}
+    ) or {}
+    tp = await SupabaseRESTAsync.select_one(
+        "teacher_profiles", "id", {"user_id": str(current_user.id)}
+    )
+    if not tp or str(course.get("teacher_id")) != str(tp.get("id")):
+        raise HTTPException(status_code=403, detail="Not your content.")
+    return content
+
+
+@router.patch("/content/{content_id}")
+async def update_content_item(
+    content_id: str,
+    payload: dict = Body(...),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Update the editable details of a content item (title, description,
+    access level, downloadable, type). Verifies ownership."""
+    await _assert_owns_content(content_id, current_user)
+
+    allowed = {"title", "description", "access_level", "is_downloadable", "content_type", "order_index"}
+    updates = {k: payload[k] for k in allowed if k in payload}
+    if not updates:
+        return {"success": True, "updated": 0}
+
+    await SupabaseRESTAsync.update("course_content", updates, {"id": content_id})
+    return {"success": True, "updated": len(updates)}
+
+
+@router.delete("/content/{content_id}")
+async def delete_content_item(
+    content_id: str,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Delete a content item and best-effort remove its R2 objects. Verifies ownership."""
+    content = await _assert_owns_content(content_id, current_user)
+
+    from services import r2_storage
+    for url in (content.get("content_url"), content.get("thumbnail_url")):
+        if isinstance(url, str) and url.startswith("r2://"):
+            r2_storage.delete_object(url[len("r2://"):])
+
+    await SupabaseRESTAsync.delete("course_content", {"id": content_id})
+    return {"success": True, "deleted": content_id}
+
+
 
 @router.get("/sessions")
 async def get_teacher_sessions(

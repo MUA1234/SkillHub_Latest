@@ -144,6 +144,12 @@ const TeacherContentPage = () => {
   const [playerLoading, setPlayerLoading] = useState(false);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
 
+  // Edit / delete content item.
+  const [editingItem, setEditingItem] = useState<CourseContent | null>(null);
+  const [editForm, setEditForm] = useState({ title: '', description: '', access_level: 'free', is_downloadable: true });
+  const [editSaving, setEditSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const [folderForm, setFolderForm] = useState({
     title: '',
     description: '',
@@ -292,6 +298,48 @@ const TeacherContentPage = () => {
       if (url) window.open(url, '_blank');
     } catch {
       /* ignore */
+    }
+  };
+
+  const openEdit = (item: CourseContent) => {
+    setEditingItem(item);
+    setEditForm({
+      title: item.title || '',
+      description: item.description || '',
+      access_level: item.access_level || 'free',
+      is_downloadable: !!item.is_downloadable,
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editingItem) return;
+    setEditSaving(true);
+    try {
+      await apiClient.updateContentItem(editingItem.id, {
+        title: editForm.title.trim(),
+        description: editForm.description,
+        access_level: editForm.access_level,
+        is_downloadable: editForm.is_downloadable,
+      });
+      setEditingItem(null);
+      if (selectedCourse) await fetchCourseContent(selectedCourse);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to update content');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDeleteItem = async (item: CourseContent) => {
+    if (!window.confirm(`Delete "${item.title}"? This can't be undone.`)) return;
+    setDeletingId(item.id);
+    try {
+      await apiClient.deleteContent(item.id);
+      if (selectedCourse) await fetchCourseContent(selectedCourse);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete content');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -885,10 +933,10 @@ const TeacherContentPage = () => {
                                 <Download className="w-4 h-4" />
                               </button>
                             )}
-                            <button className="p-1 text-espresso/45 hover:text-forest">
+                            <button onClick={() => openEdit(item)} title="Edit" className="p-1 text-espresso/45 hover:text-forest">
                               <Edit className="w-4 h-4" />
                             </button>
-                            <button className="p-1 text-espresso/45 hover:text-coral">
+                            <button onClick={() => handleDeleteItem(item)} disabled={deletingId === item.id} title="Delete" className="p-1 text-espresso/45 hover:text-coral disabled:opacity-40">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
@@ -980,10 +1028,10 @@ const TeacherContentPage = () => {
                                     <Download className="w-4 h-4" />
                                   </button>
                                 )}
-                                <button className="text-forest hover:text-forest-500">
+                                <button onClick={() => openEdit(item)} title="Edit" className="text-forest hover:text-forest-500">
                                   <Edit className="w-4 h-4" />
                                 </button>
-                                <button className="text-coral hover:text-coral-400">
+                                <button onClick={() => handleDeleteItem(item)} disabled={deletingId === item.id} title="Delete" className="text-coral hover:text-coral-400 disabled:opacity-40">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
@@ -1379,6 +1427,78 @@ const TeacherContentPage = () => {
                   initialAudioOnly={playing.content_type === 'audio'}
                 />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit content modal */}
+      {editingItem && (
+        <div
+          className="fixed inset-0 z-50 bg-espresso/70 flex items-center justify-center p-4"
+          onClick={() => !editSaving && setEditingItem(null)}
+        >
+          <div className="bg-cream-50 rounded-2xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-espresso/10">
+              <h2 className="font-semibold text-espresso">Edit content</h2>
+              <button onClick={() => setEditingItem(null)} className="p-2 text-espresso/55 hover:text-espresso" aria-label="Close">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-espresso mb-1">Title *</label>
+                <input
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full px-3 py-2 bg-cream-100 border-2 border-espresso/15 rounded-xl text-espresso focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta outline-none transition"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-espresso mb-1">Description</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 bg-cream-100 border-2 border-espresso/15 rounded-xl text-espresso focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta outline-none transition"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-espresso mb-1">Access level</label>
+                <select
+                  value={editForm.access_level}
+                  onChange={(e) => setEditForm({ ...editForm, access_level: e.target.value })}
+                  className="w-full px-3 py-2 bg-cream-100 border-2 border-espresso/15 rounded-xl text-espresso outline-none transition"
+                >
+                  <option value="free">Free</option>
+                  <option value="premium">Premium</option>
+                  <option value="private">Private</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-espresso">
+                <input
+                  type="checkbox"
+                  checked={editForm.is_downloadable}
+                  onChange={(e) => setEditForm({ ...editForm, is_downloadable: e.target.checked })}
+                />
+                Allow students to download this content
+              </label>
+            </div>
+            <div className="flex justify-end gap-3 p-4 border-t border-espresso/10">
+              <button
+                onClick={() => setEditingItem(null)}
+                disabled={editSaving}
+                className="px-4 py-2 bg-cream-300 text-espresso rounded-lg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={editSaving || !editForm.title.trim()}
+                className="px-4 py-2 bg-terracotta text-cream rounded-lg disabled:opacity-50"
+              >
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
             </div>
           </div>
         </div>

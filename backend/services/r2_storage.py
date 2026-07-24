@@ -94,6 +94,16 @@ def presign_get(key: str, expires: Optional[int] = None, as_attachment: bool = F
     )
 
 
+def delete_object(key: str) -> None:
+    """Best-effort delete of a stored object (used when content is removed)."""
+    if not key:
+        return
+    try:
+        _client().delete_object(Bucket=settings.r2_bucket, Key=key)
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning("R2 delete_object failed for %s: %s", key, exc)
+
+
 def guess_content_type(filename: str) -> str:
     ct, _ = mimetypes.guess_type(filename)
     return ct or "application/octet-stream"
