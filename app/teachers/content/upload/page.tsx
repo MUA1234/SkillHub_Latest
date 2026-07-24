@@ -138,7 +138,20 @@ const ContentUploadPage = () => {
       }
 
       const form = new FormData();
-      form.append('file', selectedFile);
+
+      // Video/audio go straight to R2 (fast, no server round-trip); we then
+      // send only the object key. Images/documents keep the direct-file path.
+      const isMedia = fileData.content_type === 'video' || fileData.content_type === 'audio';
+      if (isMedia) {
+        const { key } = await apiClient.uploadMediaToR2(
+          selectedFile,
+          fileData.content_type === 'audio' ? 'audio' : 'media',
+        );
+        form.append('r2_key', key);
+        form.append('r2_file_size', String(selectedFile.size));
+      } else {
+        form.append('file', selectedFile);
+      }
       form.append('course_id', courseId);
       form.append('title', fileData.title.trim());
       form.append('description', fileData.description || '');

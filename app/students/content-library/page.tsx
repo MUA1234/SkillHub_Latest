@@ -99,6 +99,17 @@ const StudentContentLibraryPage = () => {
   const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
   const [accessLevels, setAccessLevels] = useState<Category[]>([]);
   const [activeMedia, setActiveMedia] = useState<ContentItem | null>(null);
+  // Resolve r2:// content_urls to a short-lived presigned URL for playback.
+  const [playbackSrc, setPlaybackSrc] = useState<string>('');
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeMedia?.content_url) { setPlaybackSrc(''); return; }
+    apiClient
+      .resolveMediaUrl(activeMedia.content_url)
+      .then((u) => { if (!cancelled) setPlaybackSrc(u); })
+      .catch(() => { if (!cancelled) setPlaybackSrc(activeMedia.content_url); });
+    return () => { cancelled = true; };
+  }, [activeMedia?.content_url]);
   const mediaStartRef = React.useRef<number>(0);
   const [pagination, setPagination] = useState({
     total: 0,
@@ -269,9 +280,10 @@ const StudentContentLibraryPage = () => {
   const handleDownload = async (contentId: string, contentUrl: string) => {
     try {
       setIsLoadingAction(true);
-      
-      window.open(contentUrl, '_blank');
-      
+
+      const resolved = await apiClient.resolveMediaUrl(contentUrl);
+      window.open(resolved, '_blank');
+
       await apiClient.updateContentProgress(contentId, {
         progress_percentage: 1,
         time_spent_minutes: 1
@@ -813,7 +825,7 @@ const StudentContentLibraryPage = () => {
             </div>
             <div className="p-4">
               <VideoPlayer
-                src={activeMedia.content_url}
+                src={playbackSrc || activeMedia.content_url}
                 title={activeMedia.title}
                 onProgress={(pos, dur) => {
                   if (!dur || !isFinite(dur)) return;

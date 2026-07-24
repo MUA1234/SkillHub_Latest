@@ -363,6 +363,15 @@ class APIClient {
     return res.url;
   }
 
+  /** Resolve a stored content_url for playback: `r2://<key>` values become a
+   *  short-lived presigned URL; everything else is returned unchanged. */
+  async resolveMediaUrl(contentUrl: string | null | undefined): Promise<string> {
+    if (contentUrl && contentUrl.startsWith("r2://")) {
+      return this.getMediaUrl(contentUrl.slice("r2://".length));
+    }
+    return contentUrl || "";
+  }
+
   /** Persist a teacher's specialization; `disability_experience` determines the
    *  teacher's teaching tracks server-side. Requires an authenticated session. */
   async saveTeacherSpecialization(payload: {

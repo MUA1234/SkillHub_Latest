@@ -22,17 +22,23 @@ class Settings(BaseSettings):
         "env_file_encoding": "utf-8",
     }
 
-    database_url: str = "postgresql://postgres:MUAmusic1234%23%40@db.juwpzzkuyqygcjrubqpt.supabase.co:5432/postgres"
-    database_pool_url: str = "postgresql://postgres.juwpzzkuyqygcjrubqpt:MUAmusic1234%23%40@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
+    # Secrets are sourced from env / backend/.env (gitignored). NEVER hardcode
+    # the DB password or any key here — this file is committed.
+    database_url: str = os.getenv("DATABASE_URL", "")
+    database_pool_url: str = os.getenv("DATABASE_POOL_URL", "")
 
-    db_host: str = "aws-1-ap-southeast-1.pooler.supabase.com"
-    db_port: int = 6543
-    db_user: str = "postgres.juwpzzkuyqygcjrubqpt"
-    db_password: str = "MUAmusic1234#@"
-    db_name: str = "postgres"
+    # Host/user/name embed only the (public) project ref — not secrets.
+    db_host: str = os.getenv("DB_HOST", "aws-1-ap-southeast-1.pooler.supabase.com")
+    db_port: int = int(os.getenv("DB_PORT", "6543"))
+    db_user: str = os.getenv("DB_USER", "postgres.juwpzzkuyqygcjrubqpt")
+    db_password: str = os.getenv("DB_PASSWORD", "")
+    db_name: str = os.getenv("DB_NAME", "postgres")
 
+    # supabase_url + the anon key are public by design (shipped to browsers);
+    # kept env-driven for cleanliness. The service key is the sensitive one and
+    # is env-only with no default.
     supabase_url: str = os.getenv("SUPABASE_URL", "https://juwpzzkuyqygcjrubqpt.supabase.co")
-    supabase_key: str = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1d3B6emt1eXF5Z2NqcnVicXB0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0OTkyOTgsImV4cCI6MjA4NDA3NTI5OH0.aYy7VG-Q1Yon9mOgucL8EDbefs0GyfD7HbWDCDrirA4")
+    supabase_key: str = os.getenv("SUPABASE_KEY", "")
     supabase_service_key: Optional[str] = os.getenv("SUPABASE_SERVICE_KEY", None)
 
     # Cloudflare R2 (S3-compatible) — heavy video/audio storage with zero egress.

@@ -978,7 +978,9 @@ async def upload_course_content(
     access_level: str = Form("free"),
     order_index: Optional[int] = Form(None),
     is_downloadable: bool = Form(False),
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    r2_key: Optional[str] = Form(None),
+    r2_file_size: Optional[int] = Form(None),
     target_disability_types: Optional[str] = Form("[]"),
     is_accessible_for_all: bool = Form(True),
     requires_vision: bool = Form(True),
@@ -1020,33 +1022,49 @@ async def upload_course_content(
                 detail="Course not found or you don't have permission to access it"
             )
         
-        try:
-            upload_result = await StorageService.upload_file(
-                file=file,
-                user_id=str(teacher_id),
-                content_type="course_content"
-            )
-        except HTTPException as e:
-            raise e
-        except Exception as e:
-            logger.error(f"File upload failed: {e}")
+        # Two upload paths:
+        #  - r2_key: large media (video/audio) the browser already PUT directly
+        #    to R2. We store a "r2://<key>" marker; playback is resolved to a
+        #    short-lived presigned URL at read time.
+        #  - file: small assets (images/docs) still go through Supabase Storage.
+        if r2_key:
+            content_url = f"r2://{r2_key}"
+            file_size_val = r2_file_size or 0
+        elif file is not None:
+            try:
+                upload_result = await StorageService.upload_file(
+                    file=file,
+                    user_id=str(teacher_id),
+                    content_type="course_content"
+                )
+            except HTTPException as e:
+                raise e
+            except Exception as e:
+                logger.error(f"File upload failed: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"File upload failed: {str(e)}"
+                )
+            content_url = upload_result["file_url"]
+            file_size_val = upload_result["file_size"]
+        else:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"File upload failed: {str(e)}"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provide either a file or an r2_key."
             )
-        
+
         try:
             disability_types_list = json_lib.loads(target_disability_types)
         except:
             disability_types_list = []
-        
+
         content_data = {
             "course_id": course_id_str,
             "title": title,
             "description": description,
             "content_type": content_type,
-            "content_url": upload_result["file_url"],
-            "file_size": str(upload_result["file_size"]),
+            "content_url": content_url,
+            "file_size": str(file_size_val),
             "access_level": access_level,
             "order_index": order_index,
             "is_downloadable": is_downloadable,
@@ -1074,9 +1092,9 @@ async def upload_course_content(
         content_id = result.get("id") if isinstance(result, dict) else result[0].get("id") if isinstance(result, list) else None
         
         return {
-            "message": "Content uploaded successfully with accessibility features", 
+            "message": "Content uploaded successfully with accessibility features",
             "content_id": str(content_id),
-            "file_url": upload_result["file_url"],
+            "file_url": content_url,
             "accessibility": {
                 "target_disability_types": disability_types_list,
                 "is_accessible_for_all": is_accessible_for_all,

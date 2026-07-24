@@ -1,0 +1,11 @@
+# Keep the Railway build-context upload small. The Docker build only needs
+# backend/ and backend_phoenix/ source; everything below is regenerated.
+.git
+node_modules
+.next
+backend/.venv
+backend/storage
+backend_phoenix/_build
+backend_phoenix/deps
+**/__pycache__
+*.log

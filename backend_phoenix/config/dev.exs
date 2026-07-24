@@ -10,7 +10,7 @@ import Config
 # ---------------------------------------------------------------------------
 config :skillhub, SkillHub.Repo,
   username: System.get_env("DB_USER", "postgres.juwpzzkuyqygcjrubqpt"),
-  password: System.get_env("DB_PASSWORD", "MUAmusic1234#@"),
+  password: System.get_env("DB_PASSWORD") || raise("DB_PASSWORD env var is required (see backend/.env.example)"),
   hostname: System.get_env("DB_HOST", "aws-1-ap-southeast-1.pooler.supabase.com"),
   port: String.to_integer(System.get_env("DB_PORT", "5432")),
   database: System.get_env("DB_NAME", "postgres"),

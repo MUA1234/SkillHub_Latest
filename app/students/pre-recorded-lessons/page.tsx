@@ -77,6 +77,17 @@ export default function PreRecordedLessonsPage() {
   const [activeDetails, setActiveDetails] = useState<any | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [progressNote, setProgressNote] = useState<string>('');
+  // Resolve r2:// content_urls to a short-lived presigned URL for playback.
+  const [playbackSrc, setPlaybackSrc] = useState<string>('');
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeDetails?.content_url) { setPlaybackSrc(''); return; }
+    apiClient
+      .resolveMediaUrl(activeDetails.content_url)
+      .then((u) => { if (!cancelled) setPlaybackSrc(u); })
+      .catch(() => { if (!cancelled) setPlaybackSrc(activeDetails.content_url); });
+    return () => { cancelled = true; };
+  }, [activeDetails?.content_url]);
   const startTimeRef = React.useRef<number>(0);
 
   const openLesson = async (lesson: Lesson) => {
@@ -143,13 +154,14 @@ export default function PreRecordedLessonsPage() {
     setDownloading(true);
     setDownloadProgress({ bytes: 0, total: null });
     try {
+      const downloadUrl = await apiClient.resolveMediaUrl(activeDetails.content_url);
       await saveLessonOffline(
         {
           id: activeLesson.id,
           title: activeLesson.title,
           courseTitle: activeLesson.course_title,
           teacherName: activeLesson.teacher_name,
-          contentUrl: activeDetails.content_url,
+          contentUrl: downloadUrl,
           captionUrl:
             activeDetails.caption_url ||
             activeLesson.accessibility_features.caption_url,
@@ -637,7 +649,7 @@ export default function PreRecordedLessonsPage() {
                 </div>
               ) : activeDetails?.content_url ? (
                 <VideoPlayer
-                  src={activeDetails.content_url}
+                  src={playbackSrc || activeDetails.content_url}
                   poster={activeLesson.thumbnail_url}
                   title={activeLesson.title}
                   captionUrl={

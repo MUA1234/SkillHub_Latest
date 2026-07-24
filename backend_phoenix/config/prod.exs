@@ -1,16 +1,15 @@
-import Config
+# NOTE: app-level force_ssl is intentionally NOT set.
+#
+# On Railway/Fly/Render the platform terminates TLS at its edge and forwards
+# plain HTTP into the container — including the internal /healthz check, which
+# carries no `x-forwarded-proto` header. With force_ssl on, Plug.SSL 301-
+# redirects that health check to https:// and the platform (which follows no
+# redirect and expects a 200) marks the service unhealthy, so the deploy fails.
+# The edge already redirects http→https for real users, so enforcing it again
+# here is both redundant and harmful. Re-enable only behind a proxy that sets
+# x-forwarded-proto AND excludes the health path.
 
-# Force using SSL in production. This also sets the "strict-security-transport" header,
-# known as HSTS. If you have a health check endpoint, you may want to exclude it below.
-# Note `:force_ssl` is required to be set at compile-time.
-config :skillhub, SkillHubWeb.Endpoint,
-  force_ssl: [
-    rewrite_on: [:x_forwarded_proto],
-    exclude: [
-      # paths: ["/health"],
-      hosts: ["localhost", "127.0.0.1"]
-    ]
-  ]
+import Config
 
 # Do not print debug messages in production
 config :logger, level: :info

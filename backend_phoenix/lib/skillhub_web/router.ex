@@ -24,9 +24,13 @@ defmodule SkillHubWeb.Router do
 
     get "/impact", ImpactController, :show
 
-    # Auth (no valid JWT yet) — bcrypt + email, now fully native.
-    post "/auth/register", AuthController, :register
-    post "/auth/login", AuthController, :login
+    # Auth (no valid JWT yet).
+    # NOTE: register + login are intentionally PROXIED to Python (not matched
+    # here) so the Python implementation runs — it enriches the login response
+    # with the student's accessibility_track / teacher teaching_tracks that drive
+    # dashboard routing. Re-adding these native routes would bypass that.
+    #   post "/auth/register", AuthController, :register
+    #   post "/auth/login", AuthController, :login
     get "/auth/verify-email", AuthController, :verify_email
     post "/auth/verify-email", AuthController, :verify_email
     post "/auth/resend-verification", AuthController, :resend_verification
@@ -40,8 +44,9 @@ defmodule SkillHubWeb.Router do
   scope "/api/v1", SkillHubWeb do
     pipe_through :authenticated
 
-    # Auth (password-less subset — login/register/etc. are proxied to Python)
-    get "/auth/me", AuthController, :me
+    # Auth. /auth/me is PROXIED to Python (not matched here) so its response
+    # carries accessibility_track / teaching_tracks / verified_specialist.
+    #   get "/auth/me", AuthController, :me
     post "/auth/refresh", AuthController, :refresh
     post "/auth/logout", AuthController, :logout
 
@@ -122,8 +127,11 @@ defmodule SkillHubWeb.Router do
     get "/teachers/sponsorship/:request_id", TeacherController, :get_sponsorship
     put "/teachers/sponsorship/:request_id", TeacherController, :update_sponsorship
     delete "/teachers/sponsorship/:request_id", TeacherController, :delete_sponsorship
-    get "/teachers/students/rest", TeacherController, :students
-    get "/teachers/students", TeacherController, :students
+    # PROXIED to Python — the roster must be filtered by the accessibility-track
+    # data wall (a specialist teacher only sees matching students). The native
+    # version returns unfiltered students, so it stays disabled.
+    #   get "/teachers/students/rest", TeacherController, :students
+    #   get "/teachers/students", TeacherController, :students
     get "/teachers/schedule/rest", TeacherController, :schedule
     get "/teachers/schedule", TeacherController, :schedule
     get "/teachers/schedule/simple", TeacherController, :schedule
@@ -186,7 +194,9 @@ defmodule SkillHubWeb.Router do
     get "/students/dashboard", StudentController, :dashboard
     get "/students/profile", StudentController, :profile
     put "/students/profile", StudentController, :update_profile
-    get "/students/find-teachers", StudentController, :find_teachers
+    # PROXIED to Python — find-teachers must apply the accessibility-track wall
+    # (differently-abled students see only matching specialists, and vice versa).
+    #   get "/students/find-teachers", StudentController, :find_teachers
     post "/students/reviews", StudentController, :create_review
     get "/teachers/:teacher_id/reviews", TeacherController, :reviews
     get "/students/subjects", StudentController, :subjects

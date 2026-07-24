@@ -1,20 +1,19 @@
-# Railway Configuration for SkillHub Platform
-# Frontend service configuration (Next.js) - Optimized for fast builds
+# Railway service config — SkillHub FULL backend (Phoenix gateway + Python
+# FastAPI in one image via Dockerfile.backend). Phoenix binds Railway's $PORT
+# and strangler-proxies Python-only routes over 127.0.0.1:8001.
+#
+# The Next.js frontend is hosted on Vercel, NOT here.
+# Env vars are set in the Railway dashboard (see DEPLOY_RAILWAY.md) — not in
+# this file, so no secrets live in the repo.
 
 [build]
-# Use Docker for better caching and multi-stage builds
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "Dockerfile.backend"
 
 [deploy]
-# Use the standalone server (started via node server.js in Dockerfile)
-healthcheckPath = "/"
+healthcheckPath = "/healthz"
 healthcheckTimeout = 300
 numReplicas = 1
 sleepApplication = false
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-
-[env]
-NODE_ENV = "production"
-NEXT_TELEMETRY_DISABLED = "1"
