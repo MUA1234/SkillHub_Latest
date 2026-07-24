@@ -250,8 +250,8 @@ const TeacherLiveSessionsPage = () => {
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newSessionData.title.trim() || !newSessionData.subject || !newSessionData.date || !newSessionData.time) {
-      alert('Please fill in all required fields');
+    if (!newSessionData.title.trim() || !newSessionData.date || !newSessionData.time) {
+      alert('Please add a title, date, and time.');
       return;
     }
 
@@ -285,8 +285,8 @@ const TeacherLiveSessionsPage = () => {
         meeting_link: null,
         location: newSessionData.grade || null,
         course_id: null,
-        subject: newSessionData.subject,
-        grade_level: newSessionData.grade,
+        subject: newSessionData.subject || 'General',
+        grade_level: newSessionData.grade || null,
         price: parseFloat(newSessionData.price) || 0,
         currency: 'USD',
         requires_payment: newSessionData.requiresPayment,
@@ -554,18 +554,11 @@ const TeacherLiveSessionsPage = () => {
   };
 
 
+  // Truly instant: jump straight into a fresh video room (LiveKit creates it on
+  // join). No form, no scheduling — one click and you're live.
   const openInstantSession = () => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 5);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    setNewSessionData(prev => ({
-      ...prev,
-      title: prev.title || 'Instant session',
-      date: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-      time: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
-      duration: prev.duration || '60',
-    }));
-    setIsNewSessionModalOpen(true);
+    const roomId = `instant-${currentUser?.id || 'room'}-${Date.now()}`;
+    router.push(`/teachers/meeting-room/${roomId}`);
   };
 
   const viewRecordings = () => {
@@ -865,12 +858,15 @@ const TeacherLiveSessionsPage = () => {
                         )}
                         {(session.status === 'upcoming' || session.status === 'scheduled') && (
                           <>
-                            <button 
-                              onClick={() => handleStatusUpdate(session.id, 'live')}
+                            <button
+                              onClick={async () => {
+                                try { await handleStatusUpdate(session.id, 'live'); } catch {}
+                                router.push(`/teachers/meeting-room/${session.id}`);
+                              }}
                               className="flex items-center inline-flex items-center gap-2 px-4 py-2 bg-forest text-cream rounded-full border-2 border-espresso shadow-sticker-sm hover:-translate-y-0.5 hover:shadow-sticker transition-transform font-semibold"
                             >
                               <Play className="w-4 h-4 mr-2" />
-                              Start Session
+                              Start &amp; Join
                             </button>
                             <button
                               onClick={() => handleStatusUpdate(session.id, 'cancelled')}
@@ -995,7 +991,7 @@ const TeacherLiveSessionsPage = () => {
                   
                   <div>
                     <label className="block text-sm font-medium text-espresso mb-1">
-                      Subject
+                      Subject <span className="text-espresso/45">(optional)</span>
                     </label>
                     <input
                       type="text"
@@ -1004,13 +1000,12 @@ const TeacherLiveSessionsPage = () => {
                       onChange={handleInputChange}
                       className="w-full p-3 border border-espresso/20 rounded-lg"
                       placeholder="Mathematics"
-                      required
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-espresso mb-1">
-                      Grade/Level
+                      Grade/Level <span className="text-espresso/45">(optional)</span>
                     </label>
                     <input
                       type="text"
@@ -1019,7 +1014,6 @@ const TeacherLiveSessionsPage = () => {
                       onChange={handleInputChange}
                       className="w-full p-3 border border-espresso/20 rounded-lg"
                       placeholder="Grade 12"
-                      required
                     />
                   </div>
                   
@@ -1072,7 +1066,7 @@ const TeacherLiveSessionsPage = () => {
                   
                   <div>
                     <label className="block text-sm font-medium text-espresso mb-1">
-                      Max Participants
+                      Max Participants <span className="text-espresso/45">(optional)</span>
                     </label>
                     <input
                       type="number"
@@ -1082,7 +1076,6 @@ const TeacherLiveSessionsPage = () => {
                       className="w-full p-3 border border-espresso/20 rounded-lg"
                       min="1"
                       max="100"
-                      required
                     />
                   </div>
                   
