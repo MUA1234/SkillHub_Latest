@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useTranslation } from '@/hooks/use-translation';
 import { apiClient, getCurrentUser, isAuthenticated } from '@/lib/api';
+import { UploadProgress } from '@/components/ui/upload-progress';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -113,6 +114,7 @@ const TeacherContentPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
   const [createFolderLoading, setCreateFolderLoading] = useState(false);
   const [createFolderError, setCreateFolderError] = useState('');
@@ -273,34 +275,41 @@ const TeacherContentPage = () => {
     }
 
     setUploadLoading(true);
+    setUploadProgress(0);
     setUploadError('');
 
     try {
+      const file = uploadForm.file!;
+      const ct = uploadForm.content_type;
+      const isMedia = ct === 'video' || ct === 'audio';
       const formData = new FormData();
-      formData.append('file', uploadForm.file);
+
+      // Video/audio upload straight to R2 (fast, with progress); the big video
+      // PUT drives the bar. Images/documents ride the FormData POST.
+      if (isMedia) {
+        const { key } = await apiClient.uploadMediaToR2(
+          file,
+          ct === 'audio' ? 'audio' : 'media',
+          setUploadProgress,
+        );
+        formData.append('r2_key', key);
+        formData.append('r2_file_size', String(file.size));
+      } else {
+        formData.append('file', file);
+      }
       formData.append('course_id', selectedCourse);
       formData.append('title', uploadForm.title);
       formData.append('description', uploadForm.description || '');
-      formData.append('content_type', uploadForm.content_type);
+      formData.append('content_type', ct);
       formData.append('access_level', uploadForm.access_level);
       formData.append('is_downloadable', String(uploadForm.is_downloadable));
 
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/teachers/content/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
+      await apiClient.uploadFormWithProgress(
+        '/api/v1/teachers/content/upload',
+        formData,
+        isMedia ? undefined : setUploadProgress,
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Upload failed');
-      }
-
-      const result = await response.json();
-      
       setUploadForm({
         title: '',
         description: '',
@@ -972,6 +981,12 @@ const TeacherContentPage = () => {
                   </p>
                 )}
               </div>
+
+              {uploadLoading && (
+                <div className="pt-2">
+                  <UploadProgress value={uploadProgress} label="Uploading content" />
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3 pt-4">
                 <button
