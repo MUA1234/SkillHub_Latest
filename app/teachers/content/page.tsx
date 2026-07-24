@@ -833,15 +833,26 @@ const TeacherContentPage = () => {
                       whileHover={{ scale: 1.02 }}
                       className="bg-cream-50 rounded-2xl border-2 border-espresso/10 shadow-kid border border-espresso/15 overflow-hidden hover:shadow-md transition-shadow"
                     >
-                      <div className="aspect-video bg-cream-100 flex items-center justify-center">
-                        {item.content_type === 'video' ? (
-                          <Video className="w-full h-full object-cover" />
-                        ) : item.content_type === 'image' ? (
-                          <ImageIcon className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => openPlayer(item)}
+                        className="relative aspect-video w-full bg-cream-100 flex items-center justify-center overflow-hidden group"
+                        title={item.content_type === 'video' || item.content_type === 'audio' ? 'Play' : 'Open'}
+                      >
+                        {thumbUrls[item.id] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={thumbUrls[item.id]} alt={item.title} className="w-full h-full object-cover" />
                         ) : (
                           getTypeIcon(item.content_type)
                         )}
-                      </div>
+                        {(item.content_type === 'video' || item.content_type === 'audio') && (
+                          <span className="absolute inset-0 flex items-center justify-center bg-espresso/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="grid place-items-center w-14 h-14 rounded-full bg-cream/90 text-espresso shadow-sticker-sm">
+                              <Play className="w-6 h-6 ml-0.5" />
+                            </span>
+                          </span>
+                        )}
+                      </button>
                       <div className="p-4">
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="font-semibold text-espresso truncate">{item.title}</h3>
@@ -866,9 +877,14 @@ const TeacherContentPage = () => {
                             </span>
                           </div>
                           <div className="flex space-x-1">
-                            <button className="p-1 text-espresso/45 hover:text-terracotta">
-                              <Eye className="w-4 h-4" />
+                            <button onClick={() => openPlayer(item)} title="Play / open" className="p-1 text-espresso/45 hover:text-terracotta">
+                              <Play className="w-4 h-4" />
                             </button>
+                            {item.is_downloadable && (
+                              <button onClick={() => downloadItem(item)} title="Download" className="p-1 text-espresso/45 hover:text-forest">
+                                <Download className="w-4 h-4" />
+                              </button>
+                            )}
                             <button className="p-1 text-espresso/45 hover:text-forest">
                               <Edit className="w-4 h-4" />
                             </button>
@@ -915,7 +931,22 @@ const TeacherContentPage = () => {
                           <tr key={item.id} className="hover:bg-cream-100">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
-                                {getTypeIcon(item.content_type)}
+                                <button
+                                  type="button"
+                                  onClick={() => openPlayer(item)}
+                                  className="relative shrink-0 w-16 h-10 rounded-md overflow-hidden bg-cream-100 grid place-items-center group"
+                                  title="Play / open"
+                                >
+                                  {thumbUrls[item.id] ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={thumbUrls[item.id]} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span className="scale-[0.55]">{getTypeIcon(item.content_type)}</span>
+                                  )}
+                                  {(item.content_type === 'video' || item.content_type === 'audio') && (
+                                    <Play className="absolute w-4 h-4 text-cream drop-shadow opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  )}
+                                </button>
                                 <div className="ml-3">
                                   <div className="text-sm font-medium text-espresso">{item.title}</div>
                                   <div className="text-sm text-espresso/55 truncate max-w-xs">{item.description}</div>
@@ -941,9 +972,14 @@ const TeacherContentPage = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                               <div className="flex space-x-2">
-                                <button className="text-terracotta hover:text-terracotta-700">
-                                  <Eye className="w-4 h-4" />
+                                <button onClick={() => openPlayer(item)} title="Play / open" className="text-terracotta hover:text-terracotta-700">
+                                  <Play className="w-4 h-4" />
                                 </button>
+                                {item.is_downloadable && (
+                                  <button onClick={() => downloadItem(item)} title="Download" className="text-forest hover:text-forest-500">
+                                    <Download className="w-4 h-4" />
+                                  </button>
+                                )}
                                 <button className="text-forest hover:text-forest-500">
                                   <Edit className="w-4 h-4" />
                                 </button>
