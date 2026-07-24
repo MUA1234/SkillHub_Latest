@@ -142,6 +142,13 @@ defmodule SkillHubWeb.TeacherController do
         )
         |> Map.new(&{&1.course_id, &1.total})
 
+      content_count_by_course =
+        SQL.maps(
+          "select course_id::text course_id, count(*)::int cnt from public.course_content where course_id in (select id from public.courses where teacher_id = $1::uuid) group by course_id",
+          [tp["id"]]
+        )
+        |> Map.new(&{&1.course_id, &1.cnt})
+
       formatted =
         Enum.map(courses, fn c ->
           %{
@@ -151,7 +158,8 @@ defmodule SkillHubWeb.TeacherController do
             created_at: c["created_at"], updated_at: c["updated_at"], total_lessons: c["total_lessons"] || 0,
             total_students: c["total_students"] || 0, average_rating: numf(c["average_rating"]), total_reviews: c["total_reviews"] || 0,
             completion_rate: Map.get(progress_by_course, c["id"], 0.0),
-            total_revenue: Map.get(revenue_by_course, c["id"], 0.0)
+            total_revenue: Map.get(revenue_by_course, c["id"], 0.0),
+            content_count: Map.get(content_count_by_course, c["id"], 0)
           }
         end)
 

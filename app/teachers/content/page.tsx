@@ -785,7 +785,7 @@ const TeacherContentPage = () => {
                     <h3 className="font-semibold text-espresso mb-2">{course.title}</h3>
                     <p className="text-sm text-espresso/70 mb-3">{course.description}</p>
                     <div className="flex items-center justify-between text-sm text-espresso/55">
-                      <span>{(course as any).total_count || 0} items</span>
+                      <span>{(course as any).content_count ?? (course as any).total_count ?? 0} items</span>
                       <span>{new Date(course.created_at).toLocaleDateString()}</span>
                     </div>
                   </motion.div>
