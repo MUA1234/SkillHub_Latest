@@ -5,11 +5,10 @@
  * exported as the `manifest` route. Mobile browsers consume the same
  * file to surface the "Install app" prompt.
  *
- * Icons reference `/skillhub-logo.png` (the leafy brand mark sitting in
- * /public). It is a single-resolution asset; Lighthouse flags the missing
- * 192/512 sizes as a warning but the install prompt still appears. When
- * dedicated PWA icon sizes land, swap them in here without touching the
- * SW or page registration.
+ * Icons use the dedicated SkillHub app mark (the reading figure on a stack
+ * of books) at 192/512 in /public, so the install prompt gets crisp,
+ * correctly-sized assets and Lighthouse no longer flags missing sizes.
+ * The 512 entry is also marked `maskable` for adaptive Android icons.
  */
 
 import type { MetadataRoute } from 'next';
@@ -29,10 +28,22 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ['education', 'productivity'],
     icons: [
       {
-        src: '/skillhub-logo.png',
-        sizes: 'any',
+        src: '/android-chrome-192x192.png',
+        sizes: '192x192',
         type: 'image/png',
         purpose: 'any',
+      },
+      {
+        src: '/android-chrome-512x512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/android-chrome-512x512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
       },
     ],
   };
