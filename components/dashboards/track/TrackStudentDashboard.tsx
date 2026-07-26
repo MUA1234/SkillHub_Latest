@@ -4,11 +4,14 @@
  * Shared, track-aware student dashboard for the Visual and Hearing tracks.
  *
  * Both /students/visual/dashboard and /students/hearing/dashboard render this
- * with a `track` prop. It reuses the normal dashboard's data
- * (apiClient.getStudentDashboard) and design system, but reorganizes the
- * shortcuts + hero copy around the track's needs (audio-first for visual,
- * captions/sign-language for hearing). Global font/contrast/TTS adaptations are
- * applied separately by AdaptiveAccessibilityContext.
+ * with a `track` prop. It combines the normal dashboard data
+ * (apiClient.getStudentDashboard) with track-specific extras
+ * (apiClient.getAccessibilityDashboard: tailored-library counts, matched
+ * specialists, open bookings) and presents a distinct, unmistakable space:
+ * a full-width accent identity banner, track-specific shortcuts pointing at the
+ * student's own library + specialist finder, and a specialists preview. Global
+ * font/contrast/TTS adaptations are applied separately by
+ * AdaptiveAccessibilityContext.
  */
 
 import { useEffect, useState } from 'react';
@@ -17,6 +20,7 @@ import { useRouter } from 'next/navigation';
 import {
   BookOpen, Calendar, ArrowRight, PlayCircle, Bell, Check,
   Headphones, Volume2, Captions, Hand, Settings2, FileText, Eye, Ear,
+  Star, UserCheck, Sparkles,
 } from 'lucide-react';
 import AuthenticatedNavigation from '@/components/ui/authenticated-navigation';
 import DashboardSidebar from '@/components/ui/dashboard-sidebar';
@@ -27,7 +31,9 @@ import { TagPill } from '@/components/ui/tag-pill';
 import { KidCard, KidFeatureCard } from '@/components/ui/kid-card';
 import { Illustration } from '@/components/ui/illustration';
 import { DoodleSparkle, DoodleStar } from '@/components/ui/doodle';
-import { Track, trackHome, trackLabel } from '@/lib/accessibility-tracks';
+import {
+  Track, trackHome, trackLabel, trackTheme, trackSpecialistHref,
+} from '@/lib/accessibility-tracks';
 
 interface DashboardData {
   stats: {
@@ -50,6 +56,18 @@ interface DashboardData {
   recent_notifications: Array<any>;
 }
 
+interface TrackExtras {
+  library: { total: number; audio: number; captioned: number; signed: number };
+  specialists: {
+    available: number;
+    preview: Array<{
+      teacher_user_id: string; name: string; avatar_url?: string | null;
+      average_rating: number; verified_specialist: boolean; years_experience?: number;
+    }>;
+  };
+  bookings: { open: number; total: number };
+}
+
 interface Shortcut {
   href: string; title: string; body: string; icon: React.ReactNode;
   tone: 'terracotta' | 'mustard' | 'forest' | 'cream';
@@ -66,6 +84,7 @@ interface TrackConfig {
   toolsTitle: string;
   toolsBody: string;
   toolsPoints: string[];
+  libraryLabel: string;
 }
 
 const TRACK_CONFIG: Record<Track, TrackConfig> = {
@@ -83,10 +102,11 @@ const TRACK_CONFIG: Record<Track, TrackConfig> = {
       'Request large-print or braille material from your teacher',
       'Screen-reader landmarks on every page',
     ],
+    libraryLabel: 'audio lessons',
     shortcuts: [
-      { href: '/students/pre-recorded-lessons', title: 'Listen to lessons', body: 'Audio versions of every lesson, ready to play.', icon: <Headphones className="w-6 h-6" />, tone: 'terracotta', tilt: 'left' },
-      { href: '/students/content-library', title: 'My audio library', body: 'Narrated content and described videos.', icon: <Volume2 className="w-6 h-6" />, tone: 'mustard', tilt: 'right' },
-      { href: '/students/live-sessions', title: 'Screen-reader classes', body: 'Live sessions that work with your reader.', icon: <PlayCircle className="w-6 h-6" />, tone: 'forest', tilt: 'left' },
+      { href: '/students/visual/library', title: 'Listen to lessons', body: 'Audio & audio-described lessons, ready to play.', icon: <Headphones className="w-6 h-6" />, tone: 'terracotta', tilt: 'left' },
+      { href: '/students/visual/find-specialist', title: 'Find a specialist', body: 'Teachers trained for the Visual track.', icon: <UserCheck className="w-6 h-6" />, tone: 'mustard', tilt: 'right' },
+      { href: '/students/live-sessions', title: 'Screen-reader classes', body: 'Live sessions that work with your reader.', icon: <Volume2 className="w-6 h-6" />, tone: 'forest', tilt: 'left' },
       { href: '/students/settings/accessibility', title: 'Accessibility settings', body: 'Voice, contrast, text size and more.', icon: <Settings2 className="w-6 h-6" />, tone: 'cream', tilt: 'right' },
     ],
   },
@@ -104,9 +124,10 @@ const TRACK_CONFIG: Record<Track, TrackConfig> = {
       'Download full transcripts of each lesson',
       'Sign-language library and interpreted sessions',
     ],
+    libraryLabel: 'captioned lessons',
     shortcuts: [
-      { href: '/students/pre-recorded-lessons', title: 'Captioned lessons', body: 'Every lesson with synced captions.', icon: <Captions className="w-6 h-6" />, tone: 'terracotta', tilt: 'left' },
-      { href: '/students/content-library', title: 'Sign-language library', body: 'Signed explainers and content.', icon: <Hand className="w-6 h-6" />, tone: 'mustard', tilt: 'right' },
+      { href: '/students/hearing/library', title: 'Captioned lessons', body: 'Captions, transcripts & signed explainers.', icon: <Captions className="w-6 h-6" />, tone: 'terracotta', tilt: 'left' },
+      { href: '/students/hearing/find-specialist', title: 'Find a specialist', body: 'Teachers trained for the Hearing track.', icon: <UserCheck className="w-6 h-6" />, tone: 'mustard', tilt: 'right' },
       { href: '/students/recordings', title: 'Transcripts', body: 'Read along or download full transcripts.', icon: <FileText className="w-6 h-6" />, tone: 'forest', tilt: 'left' },
       { href: '/students/settings/accessibility', title: 'Accessibility settings', body: 'Captions, visual alerts and more.', icon: <Settings2 className="w-6 h-6" />, tone: 'cream', tilt: 'right' },
     ],
@@ -115,10 +136,19 @@ const TRACK_CONFIG: Record<Track, TrackConfig> = {
 
 const REMINDER_STORAGE_KEY = 'skillhub_session_reminders_v1';
 
+// Accent identity banner — direct classes so both forest (visual) and coral
+// (hearing) work regardless of the KidCard tone set.
+const BANNER_ACCENT: Record<'forest' | 'coral', string> = {
+  forest: 'bg-forest text-cream',
+  coral: 'bg-coral text-cream',
+};
+
 export default function TrackStudentDashboard({ track }: { track: Track }) {
   const router = useRouter();
   const cfg = TRACK_CONFIG[track];
+  const theme = trackTheme(track);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [extras, setExtras] = useState<TrackExtras | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [reminderSessionIds, setReminderSessionIds] = useState<Set<string>>(new Set());
@@ -140,16 +170,16 @@ export default function TrackStudentDashboard({ track }: { track: Track }) {
     } catch { /* ignore */ }
   }, []);
 
-  // Guard: student only; must match this track. Wrong track → their own home;
-  // no track → the normal dashboard.
+  // Belt-and-suspenders guard (the students layout gate is authoritative):
+  // student only, matching this track.
   useEffect(() => {
-    if (!isAuthenticated()) { router.push('/auth'); return; }
+    if (!isAuthenticated()) { router.replace('/auth'); return; }
     const cu = getCurrentUser() as any;
-    if (cu?.role !== 'student') { router.push('/auth'); return; }
+    if (cu?.role !== 'student') { router.replace('/auth'); return; }
     const myTrack = cu?.accessibility_track as Track | null | undefined;
-    if (!myTrack) { router.push('/students/dashboard'); return; }
-    if (myTrack !== track) { router.push(trackHome(myTrack)); return; }
-    if (!dashboardData && !error) fetchDashboardStats();
+    if (!myTrack) { router.replace('/students/dashboard'); return; }
+    if (myTrack !== track) { router.replace(trackHome(myTrack)); return; }
+    if (!dashboardData && !error) fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, track]);
 
@@ -178,14 +208,22 @@ export default function TrackStudentDashboard({ track }: { track: Track }) {
     }
   };
 
-  const fetchDashboardStats = async () => {
+  const fetchAll = async () => {
     try {
       setIsLoading(true);
       setError('');
-      const response = await apiClient.getStudentDashboard();
-      setDashboardData(response.data);
+      const [dash, ext] = await Promise.allSettled([
+        apiClient.getStudentDashboard(),
+        apiClient.getAccessibilityDashboard(),
+      ]);
+      if (dash.status === 'fulfilled') {
+        setDashboardData(dash.value.data);
+      } else {
+        throw dash.reason;
+      }
+      if (ext.status === 'fulfilled') setExtras(ext.value.data);
     } catch (err: any) {
-      setError(err.message || 'Failed to load dashboard data');
+      setError(err?.message || 'Failed to load dashboard data');
       setDashboardData({
         stats: { enrolled_courses: 0, active_courses: 0, completed_courses: 0, total_study_hours: 0, study_streak_days: 0 },
         enrolled_courses: [], upcoming_sessions: [], recent_notifications: [],
@@ -205,6 +243,7 @@ export default function TrackStudentDashboard({ track }: { track: Track }) {
           <DashboardSidebar userRole="student" />
           <main className="flex-1 pt-12 lg:pt-0 p-4 sm:p-6 lg:p-8">
             <div className="space-y-6">
+              <div className="h-20 rounded-2xl bg-espresso/10 animate-pulse" />
               <div className="h-72 rounded-[2.5rem] bg-espresso/10 animate-pulse" />
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[1, 2, 3, 4].map((i) => <div key={i} className="h-24 rounded-2xl bg-espresso/10 animate-pulse" />)}
@@ -224,6 +263,33 @@ export default function TrackStudentDashboard({ track }: { track: Track }) {
         <DashboardSidebar userRole="student" />
 
         <main className="flex-1 pt-12 lg:pt-0 p-4 sm:p-6 lg:p-8 space-y-8 min-h-[calc(100vh-4rem)]">
+          {/* Strong identity banner — the unmistakable "which space am I in" cue. */}
+          <section
+            className={`rounded-3xl border-2 border-espresso shadow-sticker ${BANNER_ACCENT[theme.accent]} px-5 py-4 sm:px-6 sm:py-5`}
+            aria-label={`${theme.badge} dashboard`}
+          >
+            <div className="flex items-center gap-4">
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-cream/15 border-2 border-cream/30">
+                {track === 'visual' ? <Eye className="w-7 h-7" /> : <Ear className="w-7 h-7" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-cream/80">Your dedicated space</span>
+                <h1 className="font-display text-2xl sm:text-3xl font-bold leading-tight">
+                  {theme.badge} · {firstName}
+                </h1>
+                <p className="text-cream/85 text-sm mt-0.5">
+                  {theme.tagline} — every page here is built around how you learn best.
+                </p>
+              </div>
+              <Link
+                href="/students/settings/accessibility"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-cream text-espresso border-2 border-espresso px-4 py-2 text-sm font-bold shadow-sticker-sm hover:-translate-y-0.5 hover:shadow-sticker transition-transform shrink-0"
+              >
+                <Settings2 className="w-4 h-4" /> Settings
+              </Link>
+            </div>
+          </section>
+
           {error && (
             <KidCard tone="cream" className="border-coral !p-5">
               <div className="flex items-start gap-3">
@@ -231,7 +297,7 @@ export default function TrackStudentDashboard({ track }: { track: Track }) {
                 <div className="flex-1">
                   <p className="font-semibold text-espresso">Couldn&apos;t load your dashboard</p>
                   <p className="text-sm text-espresso/70 mt-0.5">{error}</p>
-                  <button onClick={fetchDashboardStats} className="btn-kid-primary mt-3 !py-2 !px-4 text-sm">Try again</button>
+                  <button onClick={fetchAll} className="btn-kid-primary mt-3 !py-2 !px-4 text-sm">Try again</button>
                 </div>
               </div>
             </KidCard>
@@ -249,17 +315,17 @@ export default function TrackStudentDashboard({ track }: { track: Track }) {
               <>
                 <TagPill tone="mustard" icon={<DoodleStar className="w-3" />}>{stats?.study_streak_days ?? 0}-day streak</TagPill>
                 <TagPill tone="terracotta">{stats?.active_courses ?? 0} active courses</TagPill>
-                <TagPill tone="outline" className="!text-cream !border-cream/30">{stats?.total_study_hours ?? 0}h logged</TagPill>
+                <TagPill tone="outline" className="!text-cream !border-cream/30">{extras?.library.total ?? 0} {cfg.libraryLabel}</TagPill>
               </>
             }
             primaryCta={
-              <Link href="/students/content-library" className="btn-kid-primary">
-                Keep learning <ArrowRight className="w-4 h-4" />
+              <Link href={`/students/${track}/library`} className="btn-kid-primary">
+                Open my library <ArrowRight className="w-4 h-4" />
               </Link>
             }
             secondaryCta={
-              <Link href="/students/settings/accessibility" className="btn-kid-ghost !text-cream !border-cream/25 hover:!bg-cream/10">
-                Accessibility settings
+              <Link href={trackSpecialistHref(track)} className="btn-kid-ghost !text-cream !border-cream/25 hover:!bg-cream/10">
+                Find a specialist
               </Link>
             }
             media={<Illustration name={track === 'visual' ? 'learn-online' : 'live-class'} size={320} priority className="drop-shadow-2xl" />}
@@ -268,8 +334,8 @@ export default function TrackStudentDashboard({ track }: { track: Track }) {
           {/* Stat pills */}
           <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <StatPill onDark={false} tone="terracotta" badge="A" value={stats?.active_courses ?? 0} label="Active courses" />
-            <StatPill onDark={false} tone="mustard" badge="B" value={`${stats?.total_study_hours ?? 0}h`} label="Hours studied" />
-            <StatPill onDark={false} tone="forest" badge="C" value={stats?.completed_courses ?? 0} label="Finished" />
+            <StatPill onDark={false} tone="mustard" badge="B" value={extras?.library.total ?? 0} label={`Tailored ${cfg.libraryLabel}`} />
+            <StatPill onDark={false} tone="forest" badge="C" value={extras?.specialists.available ?? 0} label="Specialists for you" />
             <StatPill onDark={false} tone="espresso" badge="D" value={`${stats?.study_streak_days ?? 0}d`} label="Streak" />
           </section>
 
@@ -295,6 +361,58 @@ export default function TrackStudentDashboard({ track }: { track: Track }) {
                 </Link>
               ))}
             </div>
+          </section>
+
+          {/* Specialists for your track */}
+          <section className="space-y-4">
+            <div className="flex items-end justify-between flex-wrap gap-2">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-terracotta">Your specialists</span>
+                <h2 className="font-display text-3xl font-bold text-espresso mt-1">
+                  Teachers trained for <span className="handwritten scribble-under text-terracotta">your track</span>
+                </h2>
+              </div>
+              <Link href={trackSpecialistHref(track)} className="btn-kid-ghost !py-2 !px-4 text-sm">
+                See all <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            {extras?.specialists.preview?.length ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {extras.specialists.preview.map((sp) => (
+                  <KidCard key={sp.teacher_user_id} tone="cream" sticker>
+                    <div className="flex items-start gap-3">
+                      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-espresso text-cream overflow-hidden shrink-0">
+                        {sp.avatar_url
+                          ? <img src={sp.avatar_url} alt="" className="h-full w-full object-cover" />
+                          : <UserCheck className="w-5 h-5" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-display font-bold text-lg leading-snug truncate">{sp.name}</h3>
+                          {sp.verified_specialist && <Check className="w-4 h-4 text-forest shrink-0" />}
+                        </div>
+                        <p className="text-xs text-espresso/60 mt-0.5 flex items-center gap-1">
+                          <Star className="w-3.5 h-3.5 text-mustard" /> {sp.average_rating?.toFixed(1) ?? '—'}
+                          {sp.verified_specialist ? ' · Verified specialist' : ' · Specialist'}
+                        </p>
+                      </div>
+                    </div>
+                    <Link href={trackSpecialistHref(track)} className="btn-kid-primary mt-4 !py-2 !px-4 text-sm w-full justify-center">
+                      View & book
+                    </Link>
+                  </KidCard>
+                ))}
+              </div>
+            ) : (
+              <KidCard tone="cream" className="flex flex-col items-center text-center py-10">
+                <Illustration name="mentor" size={140} />
+                <p className="text-sm text-espresso/70 mt-3 max-w-sm">
+                  We&apos;ll list specialists trained for the {trackLabel(track)} track here as they join.
+                </p>
+                <Link href={trackSpecialistHref(track)} className="btn-kid-cream mt-4 !py-2 !px-4 text-sm">Browse specialists</Link>
+              </KidCard>
+            )}
           </section>
 
           {/* Track tools card */}
@@ -355,7 +473,7 @@ export default function TrackStudentDashboard({ track }: { track: Track }) {
                 <Illustration name="empty-courses" size={160} />
                 <h3 className="font-display text-2xl font-bold mt-2 text-espresso">No courses yet</h3>
                 <p className="text-sm text-espresso/70 mt-1 max-w-sm">Find a teacher who specialises in your track and start learning.</p>
-                <Link href="/students/network/find-teachers" className="btn-kid-primary mt-5">Find a specialist teacher</Link>
+                <Link href={trackSpecialistHref(track)} className="btn-kid-primary mt-5">Find a specialist teacher</Link>
               </KidCard>
             )}
           </section>

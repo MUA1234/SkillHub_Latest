@@ -16,6 +16,7 @@ import { useTranslation } from '@/hooks/use-translation';
 import { useFocusTrap } from '@/hooks/use-focus-trap';
 import { PWAInstallButton } from '@/components/PWAInstallButton';
 import { Logo } from '@/components/ui/logo';
+import { TrackBadge } from '@/components/accessibility/TrackBadge';
 import {
   pushSupported,
   subscribeToPush,
@@ -357,6 +358,7 @@ const AuthenticatedNavigation: React.FC<AuthenticatedNavigationProps> = ({
               <Logo size="sm" />
               <p className="text-[11px] text-mustard/90 capitalize hidden sm:block tracking-wide font-semibold">{userRole} portal</p>
             </Link>
+            {userRole === 'student' && <TrackBadge className="ml-3 hidden sm:inline-flex" />}
           </div>
 
           {}

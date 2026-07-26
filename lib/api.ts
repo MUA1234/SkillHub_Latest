@@ -1640,6 +1640,44 @@ class APIClient {
     return this.request("/api/v1/students/dashboard");
   }
 
+  // --- Differently-abled (Visual / Hearing track) endpoints ---------------
+
+  /** Track-specific dashboard extras (library counts, matched specialists,
+   *  open bookings) for a Visual / Hearing student. */
+  async getAccessibilityDashboard(): Promise<any> {
+    return this.request("/api/v1/students/accessibility/dashboard");
+  }
+
+  /** The caller's tailored content library. Media arrives already presigned. */
+  async getAccessibilityLibrary(
+    params: { feature?: string; subject?: string; search?: string; page?: number; limit?: number } = {},
+  ): Promise<any> {
+    const sp = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== "") sp.append(k, String(v));
+    });
+    const qs = sp.toString();
+    return this.request(`/api/v1/students/accessibility/library${qs ? `?${qs}` : ""}`);
+  }
+
+  /** Verified/pending specialists whose track matches the caller's. */
+  async getAccessibilitySpecialists(): Promise<any> {
+    return this.request("/api/v1/students/accessibility/specialists");
+  }
+
+  /** Book a specialist (by their user id) for the caller's track. */
+  async bookSpecialist(teacherUserId: string, message?: string): Promise<any> {
+    return this.request(`/api/v1/students/accessibility/specialists/${teacherUserId}/book`, {
+      method: "POST",
+      body: JSON.stringify({ message: message ?? null }),
+    });
+  }
+
+  /** The caller's specialist bookings, newest first. */
+  async getMySpecialistBookings(): Promise<any> {
+    return this.request("/api/v1/students/accessibility/bookings");
+  }
+
   async getStudentProfile(): Promise<any> {
     return this.request("/api/v1/students/profile");
   }

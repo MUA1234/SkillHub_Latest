@@ -88,6 +88,78 @@ export function trackLabel(track: Track): string {
   return TRACK_LABELS[track] ?? track;
 }
 
+/**
+ * Per-track visual identity — drives the persistent badge, the dashboard accent
+ * and the curated navigation so a differently-abled student always sees, at a
+ * glance, which space they're in. Accents use existing design-system tokens
+ * (`forest`, `coral`) so they read as distinct from the normal student's
+ * `terracotta` theme.
+ */
+export interface TrackTheme {
+  /** Short label, e.g. "Visual". */
+  label: string;
+  /** Badge text, e.g. "Visual track". */
+  badge: string;
+  /** One-line promise of the track, e.g. "Audio-first". */
+  tagline: string;
+  /** Design-system color token for this track's accent. */
+  accent: 'forest' | 'coral';
+}
+
+export const TRACK_THEME: Record<Track, TrackTheme> = {
+  visual: { label: 'Visual', badge: 'Visual track', tagline: 'Audio-first learning', accent: 'forest' },
+  hearing: { label: 'Hearing', badge: 'Hearing track', tagline: 'Captioned & signed', accent: 'coral' },
+};
+
+export function trackTheme(track: Track): TrackTheme {
+  return TRACK_THEME[track];
+}
+
+/** The track a differently-abled student's own library page lives at. */
+export function trackLibraryHref(track: Track): string {
+  return `/students/${track}/library`;
+}
+
+/** The track a differently-abled student's specialist-matching page lives at. */
+export function trackSpecialistHref(track: Track): string {
+  return `/students/${track}/find-specialist`;
+}
+
+/**
+ * Which track a given `/students/**` path is reserved for:
+ *   'visual' | 'hearing' → only that track's students may see it
+ *   'normal'             → only students with NO track (the generic dashboard)
+ *   null                 → shared: any authenticated student may see it
+ *
+ * This is the core of the post-login "strong separation": the layout-level
+ * gate uses it to keep each student inside their own space.
+ */
+export function requiredTrackForStudentPath(path: string): Track | 'normal' | null {
+  if (path.startsWith('/students/visual')) return 'visual';
+  if (path.startsWith('/students/hearing')) return 'hearing';
+  if (path === '/students/dashboard') return 'normal';
+  return null;
+}
+
+/**
+ * For a student who IS in a track, the track-specific page a generic page
+ * should be rerouted to (so they use their tailored library / specialist
+ * finder instead of the normal-student equivalents). Returns null when the
+ * path has no track-specific equivalent.
+ */
+export function trackEquivalentForPath(path: string, track: Track): string | null {
+  if (path === '/students/content-library') return trackLibraryHref(track);
+  if (
+    path === '/students/network/find-teachers' ||
+    path.startsWith('/students/network/find-teachers/') ||
+    path === '/students/find-teachers' ||
+    path.startsWith('/students/find-teachers/')
+  ) {
+    return trackSpecialistHref(track);
+  }
+  return null;
+}
+
 /** Representative disability types stored for a teacher who teaches a track.
  *  The backend derives teaching_tracks from these, and existing
  *  teachers-by-specialization discovery keeps working. */

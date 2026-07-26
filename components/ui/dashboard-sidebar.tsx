@@ -23,21 +23,22 @@ import {
   PlayCircle,
   Network,
   Award,
-  Ticket,
   Gift,
   Menu,
   X,
   FileQuestion,
   FileText,
   ScrollText,
-  UsersRound,
-  Download,
   Sparkles,
-  Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/api";
-import { trackHome } from "@/lib/accessibility-tracks";
+import {
+  Track,
+  trackHome,
+  trackLibraryHref,
+  trackSpecialistHref,
+} from "@/lib/accessibility-tracks";
 
 type Role = "student" | "teacher" | "sponsor";
 
@@ -48,24 +49,20 @@ interface SidebarLink {
 }
 
 const links: Record<Role, SidebarLink[]> = {
+  // Normal-student nav, trimmed to the core learning flow. Peers, Groups,
+  // Campaigns, Redeem Code, Forum, Downloads and Wishlist were removed from the
+  // sidebar to declutter it (the pages still exist and are reachable by URL).
   student: [
     { label: "Dashboard", href: "/students/dashboard", icon: LayoutDashboard },
     { label: "Live Sessions", href: "/students/live-sessions", icon: Video },
     { label: "Recordings", href: "/students/recordings", icon: PlayCircle },
     { label: "Pre-recorded Lessons", href: "/students/pre-recorded-lessons", icon: PlayCircle },
     { label: "Content Library", href: "/students/content-library", icon: Library },
-    { label: "Wishlist", href: "/students/wishlist", icon: Bookmark },
-    { label: "Downloads", href: "/students/downloads", icon: Download },
     { label: "Exams", href: "/students/exams", icon: FileQuestion },
     { label: "Certificates", href: "/students/certificates", icon: Trophy },
     { label: "Progress Report", href: "/students/progress-report", icon: FileText },
     { label: "Find Teachers", href: "/students/network/find-teachers", icon: UserPlus },
-    { label: "Peer Matches", href: "/students/peers", icon: UsersRound },
-    { label: "Groups", href: "/students/groups", icon: UsersRound },
     { label: "Scholarships", href: "/students/scholarships", icon: Award },
-    { label: "Campaigns", href: "/students/campaigns", icon: Megaphone },
-    { label: "Redeem Code", href: "/students/redeem-code", icon: Ticket },
-    { label: "Forum", href: "/students/forum", icon: MessageSquare },
     { label: "Events", href: "/students/events", icon: Calendar },
     { label: "Chat", href: "/students/chat", icon: MessageSquare },
     { label: "Meetings", href: "/students/meetings", icon: Video },
@@ -163,9 +160,38 @@ function SidebarNav({
 const scrollStorageKey = (role: Role) => `dashboard-sidebar-scroll:${role}`;
 
 /**
+ * A differently-abled student gets a *curated* navigation — their tailored
+ * library and specialist finder plus the shared essentials — instead of the
+ * full normal-student menu. This is the sidebar half of the strong separation:
+ * the normal-only features (peers, groups, forum, campaigns, wishlist, …)
+ * simply aren't surfaced to a track student.
+ */
+function curatedTrackLinks(track: Track): SidebarLink[] {
+  return [
+    { label: "Dashboard", href: trackHome(track), icon: LayoutDashboard },
+    {
+      label: track === "visual" ? "Audio Library" : "Captioned Library",
+      href: trackLibraryHref(track),
+      icon: Library,
+    },
+    { label: "Find a Specialist", href: trackSpecialistHref(track), icon: UserPlus },
+    { label: "Live Sessions", href: "/students/live-sessions", icon: Video },
+    { label: "Recordings", href: "/students/recordings", icon: PlayCircle },
+    { label: "Exams", href: "/students/exams", icon: FileQuestion },
+    { label: "Certificates", href: "/students/certificates", icon: Trophy },
+    { label: "Progress Report", href: "/students/progress-report", icon: FileText },
+    { label: "Chat", href: "/students/chat", icon: MessageSquare },
+    { label: "Meetings", href: "/students/meetings", icon: Video },
+    { label: "Payment History", href: "/students/payment-history", icon: CreditCard },
+    { label: "Guardians", href: "/students/settings/guardians", icon: Heart },
+    { label: "Accessibility", href: "/students/settings/accessibility", icon: Settings },
+  ];
+}
+
+/**
  * Track-aware sidebar links. Reads the current user after mount (so SSR still
  * renders the base links and there's no hydration mismatch):
- *  - a differently-abled student's "Dashboard" points at their track dashboard
+ *  - a differently-abled student gets a curated, track-specific menu
  *  - a specialist teacher gets an extra "Specialist Hub" entry
  */
 function useTrackAwareLinks(role: Role): SidebarLink[] {
@@ -178,9 +204,7 @@ function useTrackAwareLinks(role: Role): SidebarLink[] {
     if (!user) return base;
     const track = user.accessibility_track;
     if (role === "student" && (track === "visual" || track === "hearing")) {
-      return base.map((l) =>
-        l.href === "/students/dashboard" ? { ...l, href: trackHome(track) } : l,
-      );
+      return curatedTrackLinks(track);
     }
     const teaching = Array.isArray(user.teaching_tracks) ? user.teaching_tracks : [];
     if (role === "teacher" && teaching.some((t: string) => t === "visual" || t === "hearing")) {

@@ -261,6 +261,13 @@ except Exception as e:
     logger.error(f"❌ Failed to load students routes: {e}")
 
 try:
+    from api.v1.endpoints.accessibility_student import router as accessibility_student_router
+    api_router.include_router(accessibility_student_router, prefix="/students", tags=["accessibility-student"])
+    logger.info("✅ Accessibility student (track) routes loaded")
+except Exception as e:
+    logger.error(f"❌ Failed to load accessibility student routes: {e}")
+
+try:
     from api.v1.endpoints.subjects import router as subjects_router
     api_router.include_router(subjects_router, prefix="/subjects", tags=["subjects"])
     logger.info("✅ Subjects routes loaded")
