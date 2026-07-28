@@ -30,6 +30,9 @@ import {
   FileText,
   ScrollText,
   Sparkles,
+  Upload,
+  Headphones,
+  Captions,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/api";
@@ -39,6 +42,8 @@ import {
   trackLibraryHref,
   trackSpecialistHref,
 } from "@/lib/accessibility-tracks";
+import { useTeachingMode } from "@/contexts/TeachingModeContext";
+import { TeachingMode } from "@/lib/teaching-mode";
 
 type Role = "student" | "teacher" | "sponsor";
 
@@ -100,7 +105,9 @@ const links: Record<Role, SidebarLink[]> = {
   ],
 };
 
-const roleAccent: Record<Role, { active: string; hover: string; icon: string }> = {
+type Accent = { active: string; hover: string; icon: string };
+
+const roleAccent: Record<Role, Accent> = {
   student: {
     active: "bg-terracotta text-cream shadow-sticker-sm border-2 border-espresso",
     hover: "hover:bg-cream-100 hover:text-terracotta",
@@ -115,6 +122,17 @@ const roleAccent: Record<Role, { active: string; hover: string; icon: string }> 
     active: "bg-mustard text-espresso shadow-sticker-sm border-2 border-espresso",
     hover: "hover:bg-cream-100 hover:text-mustard-500",
     icon: "text-espresso",
+  },
+};
+
+// A teacher in Visual/Hearing mode gets a distinct accent so the whole shell —
+// not just the links — reads as a different space.
+const teacherModeAccent: Record<'visual' | 'hearing', Accent> = {
+  visual: roleAccent.teacher, // forest
+  hearing: {
+    active: "bg-coral text-cream shadow-sticker-sm border-2 border-espresso",
+    hover: "hover:bg-cream-100 hover:text-coral",
+    icon: "text-cream",
   },
 };
 
@@ -189,33 +207,65 @@ function curatedTrackLinks(track: Track): SidebarLink[] {
 }
 
 /**
+ * A teacher in Visual / Hearing mode gets a fully dedicated menu — reframed
+ * labels pointing at the specialist workflow (upload audio/video, their track
+ * students, their track content) — instead of the 16-item general teacher nav.
+ * This is the sidebar half of the "separate completely" split: none of the
+ * general-teaching entries are surfaced while a specialist mode is active.
+ */
+function curatedTeacherLinks(track: Track): SidebarLink[] {
+  const isVisual = track === "visual";
+  return [
+    { label: "Dashboard", href: "/teachers/dashboard", icon: LayoutDashboard },
+    { label: isVisual ? "Upload Audiobook" : "Upload Video", href: "/teachers/content/upload", icon: Upload },
+    { label: isVisual ? "My Audio Lessons" : "My Captioned Videos", href: "/teachers/content", icon: isVisual ? Headphones : Captions },
+    { label: isVisual ? "My Visual Students" : "My Hearing Students", href: "/teachers/students", icon: Users },
+    { label: "Live Classes", href: "/teachers/live-sessions", icon: Video },
+    { label: "Schedule", href: "/teachers/schedule", icon: Calendar },
+    { label: "Accessibility Media", href: "/teachers/accessibility-tracks", icon: Heart },
+    { label: "Earnings", href: "/teachers/earnings", icon: Trophy },
+    { label: "Payment History", href: "/teachers/payment-history", icon: CreditCard },
+    { label: "Profile", href: "/teachers/profile", icon: Settings },
+  ];
+}
+
+/**
  * Track-aware sidebar links. Reads the current user after mount (so SSR still
  * renders the base links and there's no hydration mismatch):
  *  - a differently-abled student gets a curated, track-specific menu
- *  - a specialist teacher gets an extra "Specialist Hub" entry
+ *  - a teacher in Visual/Hearing teaching mode gets the specialist menu
  */
-function useTrackAwareLinks(role: Role): SidebarLink[] {
+function useTrackAwareLinks(role: Role, teachingMode: TeachingMode): SidebarLink[] {
   const [user, setUser] = useState<any>(null);
   useEffect(() => {
     try { setUser(getCurrentUser()); } catch { /* ignore */ }
   }, []);
   return useMemo(() => {
+    if (role === "teacher") {
+      if (teachingMode === "visual" || teachingMode === "hearing") {
+        return curatedTeacherLinks(teachingMode);
+      }
+      return links.teacher;
+    }
     const base = links[role] || [];
     if (!user) return base;
     const track = user.accessibility_track;
     if (role === "student" && (track === "visual" || track === "hearing")) {
       return curatedTrackLinks(track);
     }
-    // Specialist teachers no longer get a separate dashboard — the single
-    // /teachers/dashboard hosts the General / Visual / Hearing switch.
     return base;
-  }, [role, user]);
+  }, [role, user, teachingMode]);
 }
 
 export default function DashboardSidebar({ userRole }: DashboardSidebarProps) {
   const pathname = usePathname();
-  const accent = roleAccent[userRole];
-  const items = useTrackAwareLinks(userRole);
+  // Teaching mode is only meaningful for teachers (default 'general' elsewhere).
+  const { mode } = useTeachingMode();
+  const items = useTrackAwareLinks(userRole, mode);
+  const accent =
+    userRole === "teacher" && (mode === "visual" || mode === "hearing")
+      ? teacherModeAccent[mode]
+      : roleAccent[userRole];
   const [open, setOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 

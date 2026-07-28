@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { apiClient, getCurrentUser } from '@/lib/api';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
 import { useAdaptiveAccessibility } from '@/contexts/AdaptiveAccessibilityContext';
+import { useTeachingMode } from '@/contexts/TeachingModeContext';
 import {
   useRealtimeNotifications,
   RealtimeNotificationRow,
@@ -84,6 +85,7 @@ const AuthenticatedNavigation: React.FC<AuthenticatedNavigationProps> = ({
   const router = useRouter();
   const { clearUserSettings } = useAccessibility();
   const { clearProfile } = useAdaptiveAccessibility();
+  const { mode: teachingMode } = useTeachingMode();
   const { t } = useTranslation();
   const currentUser = getCurrentUser();
   const userId = currentUser?.id || null;
@@ -316,9 +318,14 @@ const AuthenticatedNavigation: React.FC<AuthenticatedNavigationProps> = ({
       { name: 'Contact Us', href: roleRoute(userRole, 'contact'), icon: Phone }
     ];
 
+    // A teacher in Visual/Hearing mode gets a stripped top nav — the general
+    // Network/Community menus don't belong in the specialist shell.
+    const inSpecialistMode =
+      userRole === 'teacher' && (teachingMode === 'visual' || teachingMode === 'hearing');
+    const roleItems = inSpecialistMode ? [] : (roleSpecificItems[userRole] || []);
     return [
       ...commonItems,
-      ...(roleSpecificItems[userRole] || []),
+      ...roleItems,
       ...endItems
     ];
   };
