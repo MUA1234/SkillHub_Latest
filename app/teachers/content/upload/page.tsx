@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { UploadProgress } from '@/components/ui/upload-progress';
 import { useTeachingMode } from '@/contexts/TeachingModeContext';
 import { teachingModeConfig } from '@/lib/teaching-mode';
-import TeachingModeSwitch from '@/components/teacher/TeachingModeSwitch';
+import TeachingModeDropdown from '@/components/teacher/TeachingModeDropdown';
 import {
   FileText,
   Upload,
@@ -295,9 +295,7 @@ const ContentUploadPage = () => {
             </div>
           </div>
 
-          <div className="mb-6">
-            <TeachingModeSwitch compact />
-          </div>
+          <TeachingModeDropdown />
 
           <div className="bg-cream-50 rounded-2xl border-2 border-espresso/10 shadow-kid p-6">
             <form onSubmit={handleSubmit}>
