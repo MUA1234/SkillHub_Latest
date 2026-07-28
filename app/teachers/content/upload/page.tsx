@@ -155,12 +155,8 @@ const ContentUploadPage = () => {
       setUploadError('Please pick a course/folder this content belongs to.');
       return;
     }
-    if (restricted && restrictedAnswer === null) {
-      setUploadError(
-        mode === 'visual'
-          ? 'Please answer whether this material contains visual symbols before uploading.'
-          : 'Please answer whether this video includes sign language before uploading.',
-      );
+    if (mode === 'hearing' && restrictedAnswer === null) {
+      setUploadError('Please answer whether this video includes sign language before uploading.');
       return;
     }
 
@@ -212,10 +208,10 @@ const ContentUploadPage = () => {
         form.append('has_transcripts', 'false');
         form.append('has_audio_description', 'false');
         if (mode === 'visual') {
-          // "Does it contain visual symbols a sighted student relies on?"
-          form.append('contains_readable_symbols', String(restrictedAnswer === true));
-          form.append('requires_vision', String(restrictedAnswer === true));
-          form.append('requires_hearing', 'true'); // audio needs hearing
+          // Audiobook: sight isn't needed and there's no on-screen media, so no
+          // extra question — just tag it audio-for-blind.
+          form.append('requires_vision', 'false');
+          form.append('requires_hearing', 'true'); // you listen to it
           form.append('has_captions', 'false');
           form.append('has_sign_language', 'false');
         } else {
@@ -657,34 +653,28 @@ const ContentUploadPage = () => {
               </Card>
               )}
 
-              {/* Focused panel for Visual / Hearing modes: mode implies the
-                  audience, so we only ask the one question that matters. */}
-              {restricted && (
-                <Card className={`mb-6 border-2 ${mode === 'visual' ? 'border-forest/30 bg-forest/5' : 'border-coral/30 bg-coral/5'}`}>
+              {/* Hearing mode asks the one question that matters — is it signed?
+                  Visual (audio) needs no extra question: audio has no visuals. */}
+              {mode === 'hearing' && (
+                <Card className="mb-6 border-2 border-coral/30 bg-coral/5">
                   <CardHeader>
                     <div className="flex items-center gap-2">
-                      {mode === 'visual' ? <Eye className="h-5 w-5 text-forest" /> : <Ear className="h-5 w-5 text-coral" />}
-                      <CardTitle className="text-lg">{modeCfg.label} · accessibility</CardTitle>
+                      <Ear className="h-5 w-5 text-coral" />
+                      <CardTitle className="text-lg">{modeCfg.label} · sign language</CardTitle>
                     </div>
                     <CardDescription>{modeCfg.uploadRule}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="p-4 bg-cream-50 rounded-lg border">
                       <Label className="font-semibold text-base block mb-1">
-                        {mode === 'visual'
-                          ? 'Does this material contain symbols a normal student can understand?'
-                          : 'Does this video include sign language?'}
+                        Does this video include sign language?
                       </Label>
                       <p className="text-sm text-espresso/70 mb-3">
-                        {mode === 'visual'
-                          ? 'For example, equations, charts or diagrams shown on screen that a sighted student would need to see. If yes, we flag that a blind student may need them described.'
-                          : 'Deaf and hard-of-hearing students learn through sign language, so only signed videos are shared with them — this makes sure they can watch and understand it.'}
+                        Deaf and hard-of-hearing students learn through sign language, so only signed videos are shared
+                        with them — this makes sure they can watch and understand it.
                       </p>
                       <div className="grid grid-cols-2 gap-3">
-                        {(mode === 'visual'
-                          ? [{ v: true, label: 'Yes, it has visual symbols' }, { v: false, label: 'No, it stands on its own' }]
-                          : [{ v: true, label: 'Yes, it has sign language' }, { v: false, label: 'No sign language' }]
-                        ).map((opt) => (
+                        {[{ v: true, label: 'Yes, it has sign language' }, { v: false, label: 'No sign language' }].map((opt) => (
                           <button
                             key={String(opt.v)}
                             type="button"
@@ -699,7 +689,7 @@ const ContentUploadPage = () => {
                           </button>
                         ))}
                       </div>
-                      {mode === 'hearing' && restrictedAnswer === false && (
+                      {restrictedAnswer === false && (
                         <p className="text-xs text-coral mt-3 font-medium">
                           Heads up: without sign language, this video won&apos;t be shared with your deaf students. Upload a signed version so they can follow it.
                         </p>
