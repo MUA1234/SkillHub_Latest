@@ -74,7 +74,7 @@ export default function AccessibilitySettingsPage() {
                 <div>
                   <h2 className="font-semibold text-espresso mb-2">Your Accessibility Profile</h2>
                   <p className="text-sm text-espresso/70 mb-3">
-                    Based on your assessment, we&apos;ve optimized the platform for:
+                    Based on your selection, we&apos;ve optimized the platform for:
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {disabilities.map((disability, index) => (
@@ -112,14 +112,14 @@ export default function AccessibilitySettingsPage() {
                     No Accessibility Profile Found
                   </h2>
                   <p className="text-sm text-amber-800">
-                    You can manually adjust settings below, or complete the accessibility assessment
-                    to get personalized recommendations.
+                    You can manually adjust settings below, or choose a support dashboard set up for
+                    your needs.
                   </p>
                   <a
-                    href="/students/accessibility-onboarding"
+                    href="/students/accessibility/choose-track"
                     className="inline-block mt-3 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors"
                   >
-                    Take Assessment
+                    Choose Dashboard
                   </a>
                 </div>
               </div>
@@ -349,7 +349,7 @@ export default function AccessibilitySettingsPage() {
                 </h3>
                 <p className="text-espresso/70 mb-6">
                   This will remove all your custom adjustments and restore the settings
-                  recommended by your accessibility assessment.
+                  recommended for your chosen dashboard.
                 </p>
                 <div className="flex gap-3">
                   <button

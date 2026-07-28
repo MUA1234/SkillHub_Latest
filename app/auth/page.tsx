@@ -20,12 +20,11 @@ import { Illustration } from '@/components/ui/illustration';
 import { Logo } from '@/components/ui/logo';
 import { TagPill } from '@/components/ui/tag-pill';
 import { DoodleStar, DoodleSparkle, DoodleSquiggle, DoodleHeart } from '@/components/ui/doodle';
-import { DisabilityAssessmentForm } from '@/components/DisabilityAssessmentForm';
-import { AssessmentResult } from '@/lib/disability-assessment';
+import { StudentTrackChooser } from '@/components/accessibility/StudentTrackChooser';
+import { AssessmentResult, DisabilityType, InferredDisability, generateAdaptationProfile } from '@/lib/disability-assessment';
 import { useAdaptiveAccessibility } from '@/contexts/AdaptiveAccessibilityContext';
 import {
   Track,
-  primaryTrack,
   trackHome,
   teacherHome,
   homeForUser,
@@ -35,7 +34,14 @@ import {
 } from '@/lib/accessibility-tracks';
 
 type UserRole = 'student' | 'teacher' | 'sponsor';
-type Step = 'login' | 'chooseRole' | 'register' | 'assessment';
+type Step = 'login' | 'chooseRole' | 'register' | 'chooseTrack';
+
+// The coarse disability type each track maps to, used to seed the adaptive
+// experience and persist the profile the backend derives the track from.
+const COARSE_DISABILITY_BY_TRACK: Record<Track, DisabilityType> = {
+  visual: 'visual_impairment',
+  hearing: 'hearing_impairment',
+};
 
 const TEACHER_TRACKS: Track[] = ['visual', 'hearing'];
 
@@ -151,7 +157,7 @@ export default function AuthPage() {
 
         if (selectedRole === 'student' && formData.isDifferentlyAbled === true) {
           setRegisteredUserId(user.id || 'temp-user-id');
-          setStep('assessment');
+          setStep('chooseTrack');
           setIsLoading(false);
           return;
         }
@@ -206,35 +212,48 @@ export default function AuthPage() {
     }
   };
 
-  const handleAssessmentComplete = async (result: AssessmentResult) => {
+  const [chosenTrack, setChosenTrack] = useState<Track | null>(null);
+
+  // Parent/student picked a dashboard directly (no questionnaire). Seed the
+  // adaptive experience for that track, persist the profile server-side (the
+  // source of truth for the teacher↔student wall and the track the backend
+  // routes future logins to), then land straight on the chosen dashboard.
+  const handleTrackChosen = async (track: Track) => {
+    setChosenTrack(track);
+    setIsLoading(true);
+
+    const coarse = COARSE_DISABILITY_BY_TRACK[track];
+    const inferred: InferredDisability[] = [{ type: coarse, confidence: 1, severity: 'moderate' }];
+
     if (registeredUserId) {
+      const result: AssessmentResult = {
+        responses: [],
+        inferredDisabilities: inferred,
+        adaptationProfile: generateAdaptationProfile(inferred),
+        completedAt: new Date().toISOString(),
+      };
       initializeFromAssessment(result, registeredUserId);
     }
 
-    // Rank inferred disabilities by confidence; the top one drives the primary
-    // track (which dashboard the student lands on).
-    const sorted = [...result.inferredDisabilities].sort((a, b) => b.confidence - a.confidence);
-    const types = sorted.map((d) => d.type);
-    const track = primaryTrack(types, sorted[0]?.type);
-
-    // Auto-login so we have a token, then persist the profile server-side (the
-    // source of truth for the teacher↔student data wall and future logins).
+    // Auto-login so we have a token, then persist the profile. The disability
+    // type prefix-matches the track on both the TS and Python sides, so the
+    // backend re-derives the same `accessibility_track` on every future login.
     try {
       const resp = await apiClient.login({
         email: formData.email,
         password: formData.password,
       });
       await apiClient.saveDisabilityProfile({
-        has_disability: sorted.length > 0,
-        disability_types: types,
-        primary_disability: sorted[0]?.type ?? null,
-        severity_levels: Object.fromEntries(sorted.map((d) => [d.type, d.severity])),
+        has_disability: true,
+        disability_types: [coarse],
+        primary_disability: coarse,
+        severity_levels: { [coarse]: 'moderate' },
         onboarding_completed: true,
       });
       // The login response predates the profile write, so its
-      // accessibility_track is still null — merge the just-computed track so
-      // the track dashboard's guard sees it immediately.
-      setCurrentUser({ ...resp.user, accessibility_track: track ?? null });
+      // accessibility_track is still null — merge the chosen track so the
+      // track dashboard's guard sees it immediately.
+      setCurrentUser({ ...resp.user, accessibility_track: track });
     } catch (err) {
       console.warn('Could not persist disability profile at signup:', err);
     }
@@ -242,7 +261,7 @@ export default function AuthPage() {
     router.push(trackHome(track));
   };
 
-  const handleAssessmentSkip = () => {
+  const handleUseStandard = () => {
     router.push(trackHome(null));
   };
 
@@ -258,12 +277,21 @@ export default function AuthPage() {
     sponsor: 'Fund students, teachers, and campaigns',
   };
 
-  if (step === 'assessment') {
+  if (step === 'chooseTrack') {
     return (
       <div className="min-h-screen bg-cream-100">
-        <DisabilityAssessmentForm
-          onComplete={handleAssessmentComplete}
-          onSkip={handleAssessmentSkip}
+        <header className="bg-cream-100/90 backdrop-blur-md border-b border-espresso/8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <Link href="/" className="flex items-center" aria-label="SkillHub home">
+              <Logo size="md" priority />
+            </Link>
+          </div>
+        </header>
+        <StudentTrackChooser
+          onChoose={handleTrackChosen}
+          onUseStandard={handleUseStandard}
+          submittingTrack={chosenTrack}
+          isSubmitting={isLoading}
         />
       </div>
     );
@@ -648,8 +676,8 @@ export default function AuthPage() {
                         Are you a differently abled student?
                       </label>
                       <p className="text-xs text-espresso/65 mb-4">
-                        This helps us personalize your learning experience. If yes, we&apos;ll ask a
-                        few questions to automatically adapt the platform for you.
+                        This helps us personalize your learning experience. If yes, you&apos;ll pick
+                        the dashboard that fits you best on the next screen.
                       </p>
                       <div className="grid grid-cols-2 gap-3">
                         {[
@@ -685,8 +713,8 @@ export default function AuthPage() {
                           animate={{ opacity: 1 }}
                           className="mt-4 text-sm text-espresso bg-mustard/30 p-3 rounded-xl border border-mustard/50"
                         >
-                          After registration, we&apos;ll guide you through a brief assessment to
-                          understand your needs. A parent or guardian can help if needed.
+                          After registration, you&apos;ll choose your dashboard — just tap the one
+                          that matches your needs. A parent or guardian can help if needed.
                         </motion.p>
                       )}
                     </motion.div>
@@ -778,7 +806,7 @@ export default function AuthPage() {
                   {isLoading
                     ? 'Processing...'
                     : selectedRole === 'student' && formData.isDifferentlyAbled === true
-                    ? 'Continue to Assessment'
+                    ? 'Continue to Choose Dashboard'
                     : selectedRole === 'teacher' && teachesDifferentlyAbled === true
                     ? 'Create Specialist Account'
                     : 'Create Account'}

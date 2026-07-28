@@ -141,10 +141,10 @@ export default function DebugAccessibilityPage() {
               Refresh Page
             </button>
             <a
-              href="/students/accessibility-onboarding"
+              href="/students/accessibility/choose-track"
               className="block w-full bg-forest hover:bg-forest-400 text-white px-4 py-2 rounded text-center"
             >
-              Go to Accessibility Onboarding
+              Go to Choose Dashboard
             </a>
             <a
               href="/students/settings/accessibility"
