@@ -1100,8 +1100,11 @@ async def upload_course_content(
         if track == "visual" and content_type == "audio":
             content_data["audio_url"] = content_url
         elif track == "hearing" and content_type == "video":
-            # The uploaded video is the captioned / signed lesson itself.
-            content_data["sign_language_video_url"] = content_url
+            # Deaf students learn through sign language, so only a signed video is
+            # surfaced to them — `has_sign_language` carries the teacher's answer
+            # to "Does this video include sign language?".
+            if has_sign_language:
+                content_data["sign_language_video_url"] = content_url
 
         result = await SupabaseRESTAsync.insert("course_content", content_data)
         

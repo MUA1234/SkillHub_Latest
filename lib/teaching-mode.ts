@@ -61,9 +61,9 @@ export const TEACHING_MODE_CONFIG: Record<TeachingMode, TeachingModeConfig> = {
   hearing: {
     mode: 'hearing',
     label: 'Hearing impaired students',
-    short: 'Hearing (video)',
+    short: 'Hearing (sign language)',
     audience: 'Deaf & hard-of-hearing learners',
-    uploadRule: 'Video only — upload captioned or sign-language video these students can follow visually.',
+    uploadRule: 'Sign-language video only — deaf students learn by watching signing, so upload signed videos they can follow.',
     accept: 'video/*',
     forcedContentType: 'video',
     track: 'hearing',

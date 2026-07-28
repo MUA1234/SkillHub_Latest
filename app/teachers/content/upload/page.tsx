@@ -48,9 +48,10 @@ const ContentUploadPage = () => {
     content_type: 'document'
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  // Visual/Hearing modes: "does this contain visual symbols a sighted student
-  // relies on?" — persisted as requires_vision server-side.
-  const [containsReadableSymbols, setContainsReadableSymbols] = useState<boolean | null>(null);
+  // The one required question the restricted modes ask:
+  //   visual  → "does this contain visual symbols a sighted student relies on?"
+  //   hearing → "does this video include sign language?"
+  const [restrictedAnswer, setRestrictedAnswer] = useState<boolean | null>(null);
 
   const [courses, setCourses] = useState<any[]>([]);
   const [courseId, setCourseId] = useState('');
@@ -154,8 +155,12 @@ const ContentUploadPage = () => {
       setUploadError('Please pick a course/folder this content belongs to.');
       return;
     }
-    if (restricted && containsReadableSymbols === null) {
-      setUploadError('Please answer whether this material contains visual symbols before uploading.');
+    if (restricted && restrictedAnswer === null) {
+      setUploadError(
+        mode === 'visual'
+          ? 'Please answer whether this material contains visual symbols before uploading.'
+          : 'Please answer whether this video includes sign language before uploading.',
+      );
       return;
     }
 
@@ -203,16 +208,24 @@ const ContentUploadPage = () => {
           : ['hearing_impairment_deaf', 'hearing_impairment_hard_of_hearing'];
         form.append('target_disability_types', JSON.stringify(trackTypes));
         form.append('is_accessible_for_all', 'false');
-        form.append('contains_readable_symbols', String(containsReadableSymbols === true));
-        // Visual audio requires vision only if it embeds visual symbols; it does
-        // require hearing (it's audio). Hearing video requires sight, not sound.
-        form.append('requires_vision', String(mode === 'visual' ? containsReadableSymbols === true : true));
-        form.append('requires_hearing', String(mode === 'visual'));
         form.append('cognitive_level', String(cognitiveLevel));
-        form.append('has_captions', String(mode === 'hearing'));
         form.append('has_transcripts', 'false');
         form.append('has_audio_description', 'false');
-        form.append('has_sign_language', String(mode === 'hearing'));
+        if (mode === 'visual') {
+          // "Does it contain visual symbols a sighted student relies on?"
+          form.append('contains_readable_symbols', String(restrictedAnswer === true));
+          form.append('requires_vision', String(restrictedAnswer === true));
+          form.append('requires_hearing', 'true'); // audio needs hearing
+          form.append('has_captions', 'false');
+          form.append('has_sign_language', 'false');
+        } else {
+          // Hearing: "Does this video include sign language?" Only signed videos
+          // reach deaf students (backend gates sign_language_video_url on this).
+          form.append('has_sign_language', String(restrictedAnswer === true));
+          form.append('requires_vision', 'true'); // they watch the signing
+          form.append('requires_hearing', 'false');
+          form.append('has_captions', 'false');
+        }
       } else {
         form.append(
           'target_disability_types',
@@ -660,21 +673,24 @@ const ContentUploadPage = () => {
                       <Label className="font-semibold text-base block mb-1">
                         {mode === 'visual'
                           ? 'Does this material contain symbols a normal student can understand?'
-                          : 'Does this video contain on-screen symbols a normal student can understand?'}
+                          : 'Does this video include sign language?'}
                       </Label>
                       <p className="text-sm text-espresso/70 mb-3">
                         {mode === 'visual'
                           ? 'For example, equations, charts or diagrams shown on screen that a sighted student would need to see. If yes, we flag that a blind student may need them described.'
-                          : 'For example, equations or diagrams shown on screen. This helps us tag the lesson correctly.'}
+                          : 'Deaf and hard-of-hearing students learn through sign language, so only signed videos are shared with them — this makes sure they can watch and understand it.'}
                       </p>
                       <div className="grid grid-cols-2 gap-3">
-                        {[{ v: true, label: 'Yes, it has visual symbols' }, { v: false, label: 'No, it stands on its own' }].map((opt) => (
+                        {(mode === 'visual'
+                          ? [{ v: true, label: 'Yes, it has visual symbols' }, { v: false, label: 'No, it stands on its own' }]
+                          : [{ v: true, label: 'Yes, it has sign language' }, { v: false, label: 'No sign language' }]
+                        ).map((opt) => (
                           <button
                             key={String(opt.v)}
                             type="button"
-                            onClick={() => setContainsReadableSymbols(opt.v)}
+                            onClick={() => setRestrictedAnswer(opt.v)}
                             className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                              containsReadableSymbols === opt.v
+                              restrictedAnswer === opt.v
                                 ? 'border-terracotta bg-terracotta/10 text-terracotta-500'
                                 : 'border-espresso/15 bg-cream-50 text-espresso/70 hover:border-espresso/30'
                             }`}
@@ -683,6 +699,11 @@ const ContentUploadPage = () => {
                           </button>
                         ))}
                       </div>
+                      {mode === 'hearing' && restrictedAnswer === false && (
+                        <p className="text-xs text-coral mt-3 font-medium">
+                          Heads up: without sign language, this video won&apos;t be shared with your deaf students. Upload a signed version so they can follow it.
+                        </p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

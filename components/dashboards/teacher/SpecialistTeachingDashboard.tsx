@@ -52,12 +52,12 @@ const CONFIG: Record<Track, TrackConfig> = {
   },
   hearing: {
     label: 'Hearing impaired students',
-    audience: 'Deaf & hard-of-hearing learners — captioned & signed',
+    audience: 'Deaf & hard-of-hearing learners — sign language',
     banner: 'bg-coral text-cream',
     icon: <Ear className="w-7 h-7" />,
-    uploadVerb: 'Upload a video',
-    contentNoun: 'captioned videos',
-    emptyContent: 'No captioned/signed videos yet. Upload one and it appears in your students’ library.',
+    uploadVerb: 'Upload a sign-language video',
+    contentNoun: 'sign-language videos',
+    emptyContent: 'No sign-language videos yet. Upload a signed video and it appears in your students’ library.',
     emptyStudents: 'No hearing-impaired students matched yet. They’ll show up here when they enrol or book you.',
     isTrackItem: (r) => !!r?.sign_language_video_url && r.sign_language_video_url !== 'pending',
   },
@@ -175,12 +175,12 @@ export default function SpecialistTeachingDashboard({ track }: { track: Track })
                 <div>
                   <span className="text-xs font-bold uppercase tracking-[0.18em] text-mustard">Add a lesson</span>
                   <h2 className="font-display text-2xl sm:text-3xl font-bold mt-2 text-cream">
-                    {track === 'visual' ? 'Record it, upload it, they hear it.' : 'Caption it, upload it, they watch it.'}
+                    {track === 'visual' ? 'Record it, upload it, they hear it.' : 'Sign it, upload it, they watch it.'}
                   </h2>
                   <p className="text-cream/85 mt-2 max-w-md text-sm">
                     {track === 'visual'
                       ? 'Only audio is accepted here, so everything you add works in your students’ voice-only console.'
-                      : 'Only video is accepted here, so everything you add is something your students can follow visually.'}
+                      : 'Upload sign-language video — we ask you to confirm each one is signed, so only videos your deaf students can follow reach them.'}
                   </p>
                   <Link href="/teachers/content/upload" className="btn-kid-cream mt-5 !py-2.5 !px-5 text-sm inline-flex items-center gap-2">
                     <Upload className="w-4 h-4" /> {cfg.uploadVerb}

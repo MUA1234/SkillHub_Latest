@@ -217,8 +217,8 @@ function curatedTeacherLinks(track: Track): SidebarLink[] {
   const isVisual = track === "visual";
   return [
     { label: "Dashboard", href: "/teachers/dashboard", icon: LayoutDashboard },
-    { label: isVisual ? "Upload Audiobook" : "Upload Video", href: "/teachers/content/upload", icon: Upload },
-    { label: isVisual ? "My Audio Lessons" : "My Captioned Videos", href: "/teachers/content", icon: isVisual ? Headphones : Captions },
+    { label: isVisual ? "Upload Audiobook" : "Upload Sign-Language Video", href: "/teachers/content/upload", icon: Upload },
+    { label: isVisual ? "My Audio Lessons" : "My Sign-Language Videos", href: "/teachers/content", icon: isVisual ? Headphones : Captions },
     { label: isVisual ? "My Visual Students" : "My Hearing Students", href: "/teachers/students", icon: Users },
     { label: "Live Classes", href: "/teachers/live-sessions", icon: Video },
     { label: "Schedule", href: "/teachers/schedule", icon: Calendar },
