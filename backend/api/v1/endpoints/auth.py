@@ -166,6 +166,25 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
         )
 
 
+@router.get("/check-email")
+async def check_email(email: str):
+    """Public pre-signup check: is this email already registered?
+
+    Returns {"available": bool}. Fails open (available=True) on any lookup
+    hiccup so a transient error never blocks signup — register() still rejects
+    duplicates as the authoritative backstop.
+    """
+    normalized = (email or "").strip().lower()
+    if not normalized or "@" not in normalized:
+        return {"available": False, "email": email, "reason": "invalid"}
+    try:
+        existing = await SupabaseService.get_user_by_email(normalized)
+        return {"available": existing is None, "email": normalized}
+    except Exception as e:
+        logger.warning("check-email lookup failed for %s: %s", normalized, e)
+        return {"available": True, "email": normalized}
+
+
 
 def _enrich_user_with_tracks(user) -> None:
     """Attach accessibility-track fields to a user object in place so the login

@@ -327,6 +327,20 @@ class APIClient {
     });
   }
 
+  /** Public pre-signup check: is this email available (not already registered)?
+   *  Fails open (returns true) if the check itself errors — register() is the
+   *  authoritative backstop that rejects duplicates. */
+  async checkEmailAvailable(email: string): Promise<boolean> {
+    try {
+      const res = await this.request<{ available: boolean }>(
+        `/api/v1/auth/check-email?email=${encodeURIComponent(email)}`,
+      );
+      return res.available;
+    } catch {
+      return true;
+    }
+  }
+
   async logout(): Promise<{ success: boolean }> {
     try {
       const result = await this.request<{ success: boolean }>("/api/v1/auth/logout", {

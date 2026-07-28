@@ -60,6 +60,10 @@ export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
+  // Signup gate: terms acceptance + live email-availability check.
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [checkingEmail, setCheckingEmail] = useState(false);
   const router = useRouter();
   const { initializeFromAssessment } = useAdaptiveAccessibility();
 
@@ -96,6 +100,28 @@ export default function AuthPage() {
       [e.target.name]: e.target.value,
     });
     setError('');
+    if (e.target.name === 'email') setEmailError('');
+  };
+
+  // On registration, verify the email isn't already taken so the user finds out
+  // before submitting the whole form (register() is the authoritative backstop).
+  const verifyEmailAvailable = async (email: string): Promise<boolean> => {
+    const value = email.trim();
+    if (!value || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) return true;
+    setCheckingEmail(true);
+    try {
+      const available = await apiClient.checkEmailAvailable(value);
+      setEmailError(available ? '' : 'This email is already registered. Try signing in instead.');
+      return available;
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
+  const handleEmailBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
+    if (step === 'register') {
+      await verifyEmailAvailable(e.target.value);
+    }
   };
 
   const handleSponsorFieldChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -120,6 +146,17 @@ export default function AuthPage() {
         setCurrentUser(response.user);
         router.push(homeForUser(response.user));
       } else if (step === 'register' && selectedRole) {
+        if (!termsAccepted) {
+          setError('Please accept the Terms & Conditions to continue.');
+          setIsLoading(false);
+          return;
+        }
+        const available = await verifyEmailAvailable(formData.email);
+        if (!available) {
+          setError('This email is already registered. Try signing in instead.');
+          setIsLoading(false);
+          return;
+        }
         const user = await apiClient.register({
           email: formData.email,
           password: formData.password,
@@ -205,6 +242,11 @@ export default function AuthPage() {
         errorMessage = err.response.data.detail || err.response.data.message || JSON.stringify(err.response.data);
       } else if (err.message) {
         errorMessage = err.message;
+      }
+      // Friendlier copy for the backend's duplicate-email rejection.
+      if (/already registered/i.test(errorMessage)) {
+        errorMessage = 'This email is already registered. Try signing in instead.';
+        setEmailError(errorMessage);
       }
       setError(errorMessage);
     } finally {
@@ -641,10 +683,20 @@ export default function AuthPage() {
                     name="email"
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-cream-50 border-2 border-espresso/15 rounded-xl text-espresso placeholder:text-espresso/40 focus:ring-2 focus:ring-terracotta/30 focus:border-terracotta outline-none transition duration-200"
+                    onBlur={handleEmailBlur}
+                    aria-invalid={!!emailError}
+                    className={`w-full px-4 py-2.5 bg-cream-50 border-2 rounded-xl text-espresso placeholder:text-espresso/40 focus:ring-2 focus:ring-terracotta/30 outline-none transition duration-200 ${
+                      emailError ? 'border-coral focus:border-coral' : 'border-espresso/15 focus:border-terracotta'
+                    }`}
                     required
                     placeholder="your.email@example.com"
                   />
+                  {checkingEmail && (
+                    <p className="mt-1.5 text-xs text-espresso/55">Checking availability…</p>
+                  )}
+                  {emailError && (
+                    <p className="mt-1.5 text-xs font-semibold text-coral">{emailError}</p>
+                  )}
                 </div>
 
                 <div>
@@ -787,12 +839,38 @@ export default function AuthPage() {
                   </div>
                 )}
 
+                <label className="flex items-start gap-3 mt-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(e) => {
+                      setTermsAccepted(e.target.checked);
+                      if (e.target.checked) setError('');
+                    }}
+                    className="mt-0.5 h-5 w-5 flex-shrink-0 rounded border-2 border-espresso/30 text-terracotta accent-terracotta focus:ring-2 focus:ring-terracotta/30 cursor-pointer"
+                  />
+                  <span className="text-sm text-espresso/80 leading-snug">
+                    I accept the{' '}
+                    <Link
+                      href="/terms"
+                      target="_blank"
+                      className="font-bold text-terracotta underline decoration-2 underline-offset-2 hover:text-terracotta-500"
+                    >
+                      Terms &amp; Conditions
+                    </Link>
+                    .
+                  </span>
+                </label>
+
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={
                     isLoading ||
+                    !termsAccepted ||
+                    !!emailError ||
+                    checkingEmail ||
                     (selectedRole === 'student' && formData.isDifferentlyAbled === null) ||
                     (selectedRole === 'teacher' && teachesDifferentlyAbled === null) ||
                     (selectedRole === 'teacher' &&
