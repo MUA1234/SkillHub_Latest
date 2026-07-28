@@ -12,6 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { UploadProgress } from '@/components/ui/upload-progress';
+import { useTeachingMode } from '@/contexts/TeachingModeContext';
+import { teachingModeConfig } from '@/lib/teaching-mode';
+import TeachingModeSwitch from '@/components/teacher/TeachingModeSwitch';
 import {
   FileText,
   Upload,
@@ -33,6 +36,9 @@ import {
 
 const ContentUploadPage = () => {
   const router = useRouter();
+  const { mode } = useTeachingMode();
+  const modeCfg = teachingModeConfig(mode);
+  const restricted = mode !== 'general'; // visual → audio only, hearing → video only
   const [fileData, setFileData] = useState({
     title: '',
     subject: '',
@@ -42,6 +48,9 @@ const ContentUploadPage = () => {
     content_type: 'document'
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Visual/Hearing modes: "does this contain visual symbols a sighted student
+  // relies on?" — persisted as requires_vision server-side.
+  const [containsReadableSymbols, setContainsReadableSymbols] = useState<boolean | null>(null);
 
   const [courses, setCourses] = useState<any[]>([]);
   const [courseId, setCourseId] = useState('');
@@ -90,19 +99,29 @@ const ContentUploadPage = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setSelectedFile(e.target.files[0]);
-      
       const file = e.target.files[0];
-      const extension = file.name.split('.').pop()?.toLowerCase();
-      if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(extension || '')) {
-        setFileData(prev => ({ ...prev, content_type: 'video' }));
-      } else if (['mp3', 'wav', 'ogg', 'm4a'].includes(extension || '')) {
-        setFileData(prev => ({ ...prev, content_type: 'audio' }));
-      } else if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension || '')) {
-        setFileData(prev => ({ ...prev, content_type: 'image' }));
-      } else {
-        setFileData(prev => ({ ...prev, content_type: 'document' }));
+      const extension = file.name.split('.').pop()?.toLowerCase() || '';
+      const isVideo = ['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(extension);
+      const isAudio = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(extension);
+      const isImage = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension);
+
+      // Mode wall: Visual accepts audio only, Hearing accepts video only.
+      if (mode === 'visual' && !isAudio) {
+        setUploadError('Visual (audio) mode accepts audio files only — e.g. MP3, WAV or M4A audiobooks.');
+        e.target.value = '';
+        return;
       }
+      if (mode === 'hearing' && !isVideo) {
+        setUploadError('Hearing (video) mode accepts video files only — e.g. MP4, MOV or WebM.');
+        e.target.value = '';
+        return;
+      }
+
+      setUploadError('');
+      setSelectedFile(file);
+      const detected = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'document';
+      // In a restricted mode the content_type is fixed by the mode.
+      setFileData(prev => ({ ...prev, content_type: restricted ? modeCfg.forcedContentType || detected : detected }));
     }
   };
 
@@ -133,6 +152,10 @@ const ContentUploadPage = () => {
     }
     if (!courseId) {
       setUploadError('Please pick a course/folder this content belongs to.');
+      return;
+    }
+    if (restricted && containsReadableSymbols === null) {
+      setUploadError('Please answer whether this material contains visual symbols before uploading.');
       return;
     }
 
@@ -169,18 +192,41 @@ const ContentUploadPage = () => {
       form.append('content_type', fileData.content_type);
       form.append('access_level', 'free');
       form.append('is_downloadable', 'true');
-      form.append(
-        'target_disability_types',
-        JSON.stringify(isAccessibleForAll ? [] : targetDisabilityTypes),
-      );
-      form.append('is_accessible_for_all', String(isAccessibleForAll));
-      form.append('requires_vision', String(requiresVision));
-      form.append('requires_hearing', String(requiresHearing));
-      form.append('cognitive_level', String(cognitiveLevel));
-      form.append('has_captions', String(hasCaptions));
-      form.append('has_transcripts', String(hasTranscripts));
-      form.append('has_audio_description', String(hasAudioDescription));
-      form.append('has_sign_language', String(hasSignLanguage));
+      // Teaching-mode context: the backend uses this to wire the media into the
+      // right track library (visual → audio_url, hearing → sign_language video).
+      form.append('accessibility_track', modeCfg.track);
+      if (restricted) {
+        // In Visual/Hearing mode the mode implies the audience; skip the generic
+        // multi-select and send the mode's disability tags + the symbols answer.
+        const trackTypes = mode === 'visual'
+          ? ['visual_impairment_blind', 'visual_impairment_low_vision']
+          : ['hearing_impairment_deaf', 'hearing_impairment_hard_of_hearing'];
+        form.append('target_disability_types', JSON.stringify(trackTypes));
+        form.append('is_accessible_for_all', 'false');
+        form.append('contains_readable_symbols', String(containsReadableSymbols === true));
+        // Visual audio requires vision only if it embeds visual symbols; it does
+        // require hearing (it's audio). Hearing video requires sight, not sound.
+        form.append('requires_vision', String(mode === 'visual' ? containsReadableSymbols === true : true));
+        form.append('requires_hearing', String(mode === 'visual'));
+        form.append('cognitive_level', String(cognitiveLevel));
+        form.append('has_captions', String(mode === 'hearing'));
+        form.append('has_transcripts', 'false');
+        form.append('has_audio_description', 'false');
+        form.append('has_sign_language', String(mode === 'hearing'));
+      } else {
+        form.append(
+          'target_disability_types',
+          JSON.stringify(isAccessibleForAll ? [] : targetDisabilityTypes),
+        );
+        form.append('is_accessible_for_all', String(isAccessibleForAll));
+        form.append('requires_vision', String(requiresVision));
+        form.append('requires_hearing', String(requiresHearing));
+        form.append('cognitive_level', String(cognitiveLevel));
+        form.append('has_captions', String(hasCaptions));
+        form.append('has_transcripts', String(hasTranscripts));
+        form.append('has_audio_description', String(hasAudioDescription));
+        form.append('has_sign_language', String(hasSignLanguage));
+      }
 
       // For images/docs the file rides in this POST, so it drives the bar.
       // For media the bytes already went to R2; this is just a tiny metadata
@@ -247,6 +293,10 @@ const ContentUploadPage = () => {
                 Add new educational materials to your library
               </p>
             </div>
+          </div>
+
+          <div className="mb-6">
+            <TeachingModeSwitch compact />
           </div>
 
           <div className="bg-cream-50 rounded-2xl border-2 border-espresso/10 shadow-kid p-6">
@@ -367,6 +417,7 @@ const ContentUploadPage = () => {
               </div>
 
               {}
+              {!restricted && (
               <Card className="mb-6 border-2 border-blue-100 bg-terracotta/10/30">
                 <CardHeader>
                   <div className="flex items-center gap-2">
@@ -593,21 +644,69 @@ const ContentUploadPage = () => {
                   </div>
                 </CardContent>
               </Card>
+              )}
+
+              {/* Focused panel for Visual / Hearing modes: mode implies the
+                  audience, so we only ask the one question that matters. */}
+              {restricted && (
+                <Card className={`mb-6 border-2 ${mode === 'visual' ? 'border-forest/30 bg-forest/5' : 'border-coral/30 bg-coral/5'}`}>
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      {mode === 'visual' ? <Eye className="h-5 w-5 text-forest" /> : <Ear className="h-5 w-5 text-coral" />}
+                      <CardTitle className="text-lg">{modeCfg.label} · accessibility</CardTitle>
+                    </div>
+                    <CardDescription>{modeCfg.uploadRule}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="p-4 bg-cream-50 rounded-lg border">
+                      <Label className="font-semibold text-base block mb-1">
+                        {mode === 'visual'
+                          ? 'Does this material contain symbols a normal student can understand?'
+                          : 'Does this video contain on-screen symbols a normal student can understand?'}
+                      </Label>
+                      <p className="text-sm text-espresso/70 mb-3">
+                        {mode === 'visual'
+                          ? 'For example, equations, charts or diagrams shown on screen that a sighted student would need to see. If yes, we flag that a blind student may need them described.'
+                          : 'For example, equations or diagrams shown on screen. This helps us tag the lesson correctly.'}
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[{ v: true, label: 'Yes, it has visual symbols' }, { v: false, label: 'No, it stands on its own' }].map((opt) => (
+                          <button
+                            key={String(opt.v)}
+                            type="button"
+                            onClick={() => setContainsReadableSymbols(opt.v)}
+                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                              containsReadableSymbols === opt.v
+                                ? 'border-terracotta bg-terracotta/10 text-terracotta-500'
+                                : 'border-espresso/15 bg-cream-50 text-espresso/70 hover:border-espresso/30'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {}
               <div className="grid grid-cols-1 gap-6 mb-6">
-                
+
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-espresso mb-1">
-                    Select File
+                    {restricted ? (mode === 'visual' ? 'Select an audio file (audiobook)' : 'Select a video file') : 'Select File'}
                   </label>
                   <div className="border-2 border-dashed border-espresso/20 rounded-lg p-8 text-center">
                     <Upload className="w-12 h-12 text-espresso/45 mx-auto mb-3" />
-                    <p className="text-espresso/70 mb-4">Drag & drop files here or click to browse</p>
-                    <input 
-                      type="file" 
+                    <p className="text-espresso/70 mb-4">
+                      {restricted ? modeCfg.uploadRule : 'Drag & drop files here or click to browse'}
+                    </p>
+                    <input
+                      type="file"
                       onChange={handleFileChange}
-                      className="hidden" 
+                      accept={modeCfg.accept || undefined}
+                      className="hidden"
                       id="file-upload"
                       required
                     />

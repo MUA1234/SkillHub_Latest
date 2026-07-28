@@ -19,6 +19,9 @@ import { TagPill } from '@/components/ui/tag-pill';
 import { KidCard, KidFeatureCard } from '@/components/ui/kid-card';
 import { Illustration } from '@/components/ui/illustration';
 import { DoodleStar, DoodleSparkle, DoodleSquiggle, DoodleArrow } from '@/components/ui/doodle';
+import TeachingModeSwitch from '@/components/teacher/TeachingModeSwitch';
+import { useTeachingMode } from '@/contexts/TeachingModeContext';
+import { teachingModeConfig } from '@/lib/teaching-mode';
 
 interface TeacherStats {
   total_students: number;
@@ -37,6 +40,8 @@ export default function TeacherDashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const { mode } = useTeachingMode();
+  const modeCfg = teachingModeConfig(mode);
 
   const currentUser = getCurrentUser();
   const userRole = currentUser?.role || 'teacher';
@@ -127,6 +132,25 @@ export default function TeacherDashboard() {
 
         <main className="flex-1 pt-12 lg:pt-0 p-4 sm:p-6 lg:p-8 space-y-8 min-h-[calc(100vh-4rem)]">
           <OnboardingTour role="teacher" />
+
+          {/* The "main switch": one dashboard, three teaching contexts. */}
+          <TeachingModeSwitch />
+
+          {mode !== 'general' && (
+            <KidCard tone={mode === 'visual' ? 'forest' : 'espresso'} sticker className="!py-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                <div>
+                  <p className="font-display font-bold text-cream text-lg">
+                    You&apos;re teaching {modeCfg.label.toLowerCase()}
+                  </p>
+                  <p className="text-cream/85 text-sm mt-0.5">{modeCfg.uploadRule}</p>
+                </div>
+                <Link href="/teachers/content/upload" className="btn-kid-cream !py-2.5 !px-5 shrink-0 inline-flex items-center gap-2">
+                  <Upload className="w-4 h-4" /> Upload {mode === 'visual' ? 'an audiobook' : 'a video'}
+                </Link>
+              </div>
+            </KidCard>
+          )}
 
           {error && (
             <KidCard tone="cream" className="border-coral !p-5">

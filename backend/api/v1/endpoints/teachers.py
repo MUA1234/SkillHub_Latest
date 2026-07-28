@@ -991,9 +991,18 @@ async def upload_course_content(
     has_transcripts: bool = Form(False),
     has_audio_description: bool = Form(False),
     has_sign_language: bool = Form(False),
+    accessibility_track: Optional[str] = Form(""),
+    contains_readable_symbols: bool = Form(False),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Upload course content file with accessibility tagging using REST API"""
+    """Upload course content file with accessibility tagging using REST API.
+
+    `accessibility_track` ('visual' | 'hearing' | '') comes from the teacher's
+    dashboard teaching-mode switch. It wires the uploaded media into the right
+    differently-abled library so it actually plays for those students:
+      visual  → the audio file becomes `audio_url` (the Visual voice console reads it).
+      hearing → the video becomes `sign_language_video_url` (the Hearing library plays it).
+    """
     from services.storage_service import StorageService
     import json as json_lib
     
@@ -1083,7 +1092,17 @@ async def upload_course_content(
             "audio_description_url": "pending" if has_audio_description else None,
             "sign_language_video_url": "pending" if has_sign_language else None,
         }
-        
+
+        # Teaching-mode wiring: make the primary media resolvable in the track
+        # library. `content_url` is the r2://<key> marker (or a storage URL),
+        # which the student endpoints presign at read time.
+        track = (accessibility_track or "").lower().strip()
+        if track == "visual" and content_type == "audio":
+            content_data["audio_url"] = content_url
+        elif track == "hearing" and content_type == "video":
+            # The uploaded video is the captioned / signed lesson itself.
+            content_data["sign_language_video_url"] = content_url
+
         result = await SupabaseRESTAsync.insert("course_content", content_data)
         
         if not result:

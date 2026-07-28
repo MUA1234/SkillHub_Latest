@@ -65,11 +65,11 @@ export function trackHome(track: Track | null | undefined): string {
   }
 }
 
-/** The teacher specialist dashboard (any teacher with teaching_tracks lands here). */
-export function teacherHome(teachingTracks: Track[] | string[] | null | undefined): string {
-  return teachingTracks && teachingTracks.length > 0
-    ? '/teachers/specialist/dashboard'
-    : '/teachers/dashboard';
+/** Every teacher — general or specialist — has ONE dashboard. The General /
+ *  Visual / Hearing switch there (TeachingModeSwitch) selects the context,
+ *  seeded from `teachingTracks`. */
+export function teacherHome(_teachingTracks?: Track[] | string[] | null | undefined): string {
+  return '/teachers/dashboard';
 }
 
 /** Do a teacher's tracks overlap a student's tracks? (the hard-wall predicate) */

@@ -206,17 +206,8 @@ function useTrackAwareLinks(role: Role): SidebarLink[] {
     if (role === "student" && (track === "visual" || track === "hearing")) {
       return curatedTrackLinks(track);
     }
-    const teaching = Array.isArray(user.teaching_tracks) ? user.teaching_tracks : [];
-    if (role === "teacher" && teaching.some((t: string) => t === "visual" || t === "hearing")) {
-      const idx = base.findIndex((l) => l.href === "/teachers/dashboard");
-      const copy = [...base];
-      copy.splice(idx + 1, 0, {
-        label: "Specialist Hub",
-        href: "/teachers/specialist/dashboard",
-        icon: Sparkles,
-      });
-      return copy;
-    }
+    // Specialist teachers no longer get a separate dashboard — the single
+    // /teachers/dashboard hosts the General / Visual / Hearing switch.
     return base;
   }, [role, user]);
 }
